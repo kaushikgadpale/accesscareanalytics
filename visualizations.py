@@ -1,9 +1,11 @@
+import streamlit as st
 import plotly.express as px
+
 
 def create_patient_analysis_charts(booking_freq, service_usage):
     """Generate patient analysis visualizations"""
     col1, col2 = st.columns(2)
-    
+
     with col1:
         fig = px.bar(
             booking_freq.head(10),
@@ -13,20 +15,22 @@ def create_patient_analysis_charts(booking_freq, service_usage):
             color="Total_Appointments"
         )
         st.plotly_chart(fig, use_container_width=True)
-    
+
     with col2:
-        fig = px.treemap(
-            service_usage.head(15),
-            path=["Customer", "Services"],
+        fig = px.pie(
+            service_usage.head(10),
+            names="Services",
             values="Service_Count",
-            title="Service Utilization by Patient"
+            title="Common Services per Patient",
+            hole=0.3
         )
         st.plotly_chart(fig, use_container_width=True)
 
+
 def create_service_mix_charts(service_counts, service_duration):
-    """Generate service analysis visualizations"""
+    """Generate service mix visualizations"""
     col1, col2 = st.columns(2)
-    
+
     with col1:
         fig = px.pie(
             service_counts,
@@ -36,7 +40,7 @@ def create_service_mix_charts(service_counts, service_duration):
             hole=0.3
         )
         st.plotly_chart(fig, use_container_width=True)
-    
+
     with col2:
         fig = px.bar(
             service_duration.head(10),
@@ -47,12 +51,37 @@ def create_service_mix_charts(service_counts, service_duration):
         )
         st.plotly_chart(fig, use_container_width=True)
 
+
+def create_client_analysis_charts(client_analysis):
+    """Generate client analysis visualizations"""
+    col1, col2 = st.columns(2)
+
+    with col1:
+        fig = px.bar(
+            client_analysis.sort_values("Total_Appointments", ascending=False).head(10),
+            x="Business",
+            y="Total_Appointments",
+            title="Top Clients by Appointments",
+            color="Total_Appointments"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        fig = px.bar(
+            client_analysis.sort_values("Cancellation_Rate", ascending=False).head(10),
+            x="Business",
+            y="Cancellation_Rate",
+            title="Cancellation Rate by Client",
+            color="Cancellation_Rate"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
 def display_cancellation_insights(df):
     """Show cancellation-specific analytics"""
     cancellations = df[df["Status"] == "Cancelled"]
-    
     col1, col2 = st.columns(2)
-    
+
     with col1:
         fig = px.histogram(
             cancellations,
@@ -61,7 +90,7 @@ def display_cancellation_insights(df):
             nbins=20
         )
         st.plotly_chart(fig, use_container_width=True)
-    
+
     with col2:
         fig = px.sunburst(
             cancellations,
