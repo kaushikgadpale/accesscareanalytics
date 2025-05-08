@@ -1,30 +1,62 @@
 import streamlit as st
 import plotly.express as px
+import pandas as pd
 
 
-def create_patient_analysis_charts(booking_freq, service_usage):
+def create_patient_analysis_charts(unique_patients, booking_freq, service_usage):
     """Generate patient analysis visualizations"""
+    # First row - Appointments and Services
     col1, col2 = st.columns(2)
 
     with col1:
+        st.write("#### Top Patients by Appointments")
         fig = px.bar(
             booking_freq.head(10),
             x="Customer",
             y="Total_Appointments",
-            title="Top Patients by Appointments",
+            title="Top 10 Patients by Total Appointments",
             color="Total_Appointments"
         )
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
+        st.write("#### Patient Service Distribution")
         fig = px.pie(
             service_usage.head(10),
             names="Services",
             values="Service_Count",
-            title="Common Services per Patient",
+            title="Most Common Services per Patient",
             hole=0.3
         )
         st.plotly_chart(fig, use_container_width=True)
+
+    # Second row - Visit Patterns and Cancellations
+    col3, col4 = st.columns(2)
+
+    with col3:
+        st.write("#### Visit Frequency Analysis")
+        fig = px.histogram(
+            booking_freq,
+            x="Days_Between_Visits",
+            title="Days Between Patient Visits",
+            nbins=20
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col4:
+        st.write("#### Cancellation Rates")
+        fig = px.box(
+            booking_freq,
+            y="Cancellation_Rate",
+            title="Patient Cancellation Rate Distribution",
+            points="all"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # Display detailed patient metrics
+    st.write("### Detailed Patient Metrics")
+    metrics = pd.merge(booking_freq, service_usage[["Email", "Services", "Preferred_Business"]], on="Email")
+    st.dataframe(metrics, use_container_width=True)
 
 
 def create_service_mix_charts(service_counts, service_duration):

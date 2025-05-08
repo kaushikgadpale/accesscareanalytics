@@ -1,12 +1,20 @@
 import re
+import pandas as pd
+import plotly.express as px
 
-def format_phone_strict(raw_phone: str) -> tuple:
-    """Strict phone number formatting with validation"""
+def format_phone_strict(raw_phone):
+    """Format phone numbers in a strict format"""
+    if isinstance(raw_phone, pd.DataFrame):
+        # Handle DataFrame case
+        df = raw_phone.copy()
+        df["Formatted Phone"], df["Phone Status"] = zip(*df["Phone"].map(format_phone_strict))
+        return df
+    
+    # Handle individual phone number case
     if not raw_phone or not isinstance(raw_phone, str):
         return ("N/A", "Missing")
     
     digits = re.sub(r"[^\d]", "", raw_phone)
-    
     if len(digits) < 8:
         return (digits, "Too Short")
     if len(digits) > 15:
@@ -22,21 +30,32 @@ def format_phone_strict(raw_phone: str) -> tuple:
         if len(digits) == 10:
             return (f"+1{digits}", "Valid US/CA")
     except Exception as e:
-        return (digits, f"Error: {str(e)}")
+        return (digits, f"Error:{e}")
     
     return (digits, "Unknown")
 
 def create_phone_analysis(df):
-    """Create phone number analysis visuals"""
-    if "Phone" not in df.columns:
+    """Create phone analysis visualizations"""
+    if df.empty:
         return None, None
     
-    df["Formatted_Phone"], df["Phone_Status"] = zip(*df["Phone"].map(format_phone_strict))
-    status_counts = df["Phone_Status"].value_counts().reset_index()
+    # Get phone status counts
+    status_counts = df["Phone Status"].value_counts().reset_index()
+    status_counts.columns = ["Status", "Count"]
     
-    pie_chart = px.pie(status_counts, names="index", values="Phone_Status", 
-                      title="Phone Number Validation Status")
-    treemap = px.treemap(status_counts, path=["index"], values="Phone_Status",
-                        title="Phone Status Distribution")
+    # Create pie chart
+    pie = px.pie(status_counts, names="Status", values="Count", title="Phone Number Status Distribution")
     
-    return pie_chart, treemap
+    # Create treemap
+    tree = px.treemap(status_counts, path=["Status"], values="Count", title="Phone Number Status Breakdown")
+    
+    return pie, tree
+
+def format_phone_dataframe(df):
+    """Format phone numbers in a DataFrame"""
+    if df.empty:
+        return df
+    
+    df = df.copy()
+    df["Formatted Phone"], df["Phone Status"] = zip(*df["Phone"].map(format_phone_strict))
+    return df

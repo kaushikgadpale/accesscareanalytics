@@ -1,11 +1,10 @@
 from fastapi import FastAPI, Request, Response
-import uvicorn
-import threading
-from datetime import datetime, timedelta
-import requests
-from config import CLIENT_STATE_SECRET, LOCAL_TZ, BOOKINGS_MAILBOXES
-from auth import get_auth_headers
 import streamlit as st
+import requests
+from datetime import datetime
+import threading
+from config import LOCAL_TZ, GRAPH_API_BASE, CLIENT_STATE_SECRET
+from auth import get_auth_headers
 
 app = FastAPI()
 
@@ -16,64 +15,71 @@ async def verify(validationToken: str = None):
     return Response(status_code=400)
 
 @app.post("/webhook")
-async def handle_notification(request: Request):
-    data = await request.json()
-    for notification in data.get("value", []):
-        if notification.get("clientState") != CLIENT_STATE_SECRET:
+async def notify(req: Request):
+    data = await req.json()
+    for note in data.get("value", []):
+        if note.get("clientState") != CLIENT_STATE_SECRET:
             continue
-        process_notification(notification)
+        ev_id = note.get("resourceData", {}).get("id") or note.get("resource", "").split("/")[-1]
+        typ = note.get("changeType")
+        # Mark deleted → Cancelled
+        if typ == "deleted" and st.session_state.appointment_data is not None:
+            idx = st.session_state.appointment_data.index
+            if ev_id in idx:
+                st.session_state.appointment_data.at[ev_id, "Status"] = "Cancelled"
+        else:
+            # fetch full event → detect updated times
+            hdr = get_auth_headers()
+            r = requests.get(f"{GRAPH_API_BASE}/users/{note['resource'].split('/')[2]}/events/{ev_id}",
+                           headers=hdr)
+            if r.status_code != 200:
+                continue
+            e = r.json()
+            s = datetime.fromisoformat(e["start"]["dateTime"]).astimezone(LOCAL_TZ)
+            t = datetime.fromisoformat(e["end"]["dateTime"]).astimezone(LOCAL_TZ)
+            # assume ID==eventID
+            df = st.session_state.appointment_data
+            if ev_id in df.index:
+                old = df.loc[ev_id]
+                if s != old["Start Date"] or t != old["End Date"]:
+                    st.session_state.appointment_data.at[ev_id, "Status"] = "Rescheduled"
+                st.session_state.appointment_data.at[ev_id, ["Start Date", "End Date"]] = [s, t]
+            else:
+                # new event → treat as scheduled
+                st.session_state.appointment_data.loc[ev_id] = {
+                    "Business": "CalendarEvent",
+                    "Customer": "",
+                    "Email": "",
+                    "Phone": "",
+                    "Service": e.get("subject", ""),
+                    "Start Date": s,
+                    "End Date": t,
+                    "Duration (min)": (t-s).total_seconds()/60,
+                    "Status": "Scheduled",
+                    "Notes": "",
+                    "Source": "Calendar",
+                    "ID": ev_id
+                }
     return Response(status_code=202)
 
-def process_notification(notification):
-    """Process individual webhook notification"""
-    resource = notification.get("resource", "")
-    change_type = notification.get("changeType")
-    
-    if "users" in resource and "events" in resource:
-        user_id = resource.split("/")[2]
-        event_id = resource.split("/")[-1]
-        handle_calendar_event(user_id, event_id, change_type)
-    # Add other resource types as needed
-
-def handle_calendar_event(user_id, event_id, change_type):
-    """Handle calendar event changes"""
-    headers = get_auth_headers()
-    if not headers:
-        return
-    
-    try:
-        if change_type == "deleted":
-            update_cancelled_event(event_id)
-        else:
-            response = requests.get(
-                f"https://graph.microsoft.com/v1.0/users/{user_id}/events/{event_id}",
-                headers=headers
-            )
-            response.raise_for_status()
-            update_or_add_event(response.json())
-    except Exception as e:
-        st.error(f"Error processing calendar event: {str(e)}")
-
-def update_cancelled_event(event_id):
-    """Mark event as cancelled in session state"""
-    if st.session_state.appointment_data is not None and event_id in st.session_state.appointment_data.index:
-        st.session_state.appointment_data.at[event_id, "Status"] = "Cancelled"
-
-def update_or_add_event(event_data):
-    """Update or add event in session state"""
-    event_id = event_data["id"]
-    start_dt = datetime.fromisoformat(event_data["start"]["dateTime"]).astimezone(LOCAL_TZ)
-    end_dt = datetime.fromisoformat(event_data["end"]["dateTime"]).astimezone(LOCAL_TZ)
-    
-    if event_id in st.session_state.appointment_data.index:
-        update_existing_event(event_id, start_dt, end_dt)
-    else:
-        add_new_event(event_data, event_id, start_dt, end_dt)
-
 def run_webhook():
-    """Run the webhook server"""
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="warning")
+    """Start the webhook server"""
+    import uvicorn
+    import socket
+    
+    # Try ports 8000-8010
+    for port in range(8000, 8011):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.bind(('0.0.0.0', port))
+            sock.close()
+            # Port is available, use it
+            uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+            break
+        except socket.error:
+            continue
+        finally:
+            sock.close()
 
-def start_webhook_thread():
-    """Start webhook server in background thread"""
-    threading.Thread(target=run_webhook, daemon=True).start()
+if __name__ == "__main__":
+    run_webhook()
