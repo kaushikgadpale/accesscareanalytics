@@ -1,0 +1,13 @@
+streamlit
+requests
+pytz
+pandas
+numpy
+plotly
+azure-identity
+
+# For webhook server and env loading
+fastapi
+uvicorn
+python-dotenv
+msal
