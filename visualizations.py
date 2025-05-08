@@ -3,7 +3,7 @@ import plotly.express as px
 import pandas as pd
 
 
-def create_patient_analysis_charts(unique_patients, booking_freq, service_usage):
+def create_patient_analysis_charts(unique_patients, booking_freq, service_usage, service_counts_dist):
     """Generate patient analysis visualizations"""
     # First row - Appointments and Services
     col1, col2 = st.columns(2)
@@ -20,14 +20,16 @@ def create_patient_analysis_charts(unique_patients, booking_freq, service_usage)
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        st.write("#### Patient Service Distribution")
+        st.write("#### Service Count Distribution")
         fig = px.pie(
-            service_usage.head(10),
-            names="Services",
-            values="Service_Count",
-            title="Most Common Services per Patient",
-            hole=0.3
+            service_counts_dist,
+            values="Patient_Count",
+            names="Number_of_Services",
+            title="Number of Services per Patient",
+            hole=0.3,
+            labels={"Number_of_Services": "Number of Services", "Patient_Count": "Number of Patients"}
         )
+        fig.update_traces(textinfo="percent+label")
         st.plotly_chart(fig, use_container_width=True)
 
     # Second row - Visit Patterns and Cancellations

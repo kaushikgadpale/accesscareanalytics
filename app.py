@@ -15,7 +15,12 @@ from auth import get_auth_headers
 from data_fetcher import fetch_businesses, fetch_appointments
 from webhook import run_webhook
 from analytics import analyze_patients, analyze_service_mix, analyze_clients
-from phone_formatter import format_phone_strict, create_phone_analysis, format_phone_dataframe
+from phone_formatter import (
+    format_phone_strict, 
+    create_phone_analysis, 
+    format_phone_dataframe,
+    prepare_outlook_contacts
+)
 from visualizations import (
     create_patient_analysis_charts,
     create_service_mix_charts,
@@ -209,8 +214,8 @@ if st.session_state.fetch_complete and not st.session_state.appointment_data.emp
     # — Patient Analysis —
     with tabs[1]:
         st.header("Patient Analysis")
-        unique_patients, booking_freq, service_usage = analyze_patients(df)
-        create_patient_analysis_charts(unique_patients, booking_freq, service_usage)
+        unique_patients, booking_freq, service_usage, service_counts_dist = analyze_patients(df)
+        create_patient_analysis_charts(unique_patients, booking_freq, service_usage, service_counts_dist)
 
     # — Client Overview —
     with tabs[2]:
@@ -221,8 +226,53 @@ if st.session_state.fetch_complete and not st.session_state.appointment_data.emp
     # — Phone Validation —
     with tabs[3]:
         st.header("Phone Number Validation")
-        cleaned_phones = format_phone_dataframe(df)
-        create_phone_analysis(cleaned_phones)
+        
+        # Get phone analysis with unique numbers
+        phone_status_df = format_phone_dataframe(df)
+        phone_pie, phone_tree = create_phone_analysis(phone_status_df)
+        
+        # Show phone status distribution
+        col1, col2 = st.columns(2)
+        with col1:
+            if phone_pie:
+                st.plotly_chart(phone_pie, use_container_width=True, key="validation_phone_pie")
+        with col2:
+            if phone_tree:
+                st.plotly_chart(phone_tree, use_container_width=True, key="validation_phone_tree")
+        
+        # Show detailed phone status
+        st.write("#### Phone Status Details")
+        st.write("Showing unique phone numbers with their validation status:")
+        
+        # Add color coding based on status
+        def highlight_status(row):
+            if row["Phone Status"].startswith("Valid"):
+                return ["background-color: #e6ffe6"] * len(row)
+            elif row["Phone Status"] in ["Missing", "Too Short", "Too Long", "Invalid Format"]:
+                return ["background-color: #ffe6e6"] * len(row)
+            return ["background-color: #fff2e6"] * len(row)
+        
+        # Style the dataframe
+        styled_df = phone_status_df.style.apply(highlight_status, axis=1)
+        st.dataframe(styled_df, use_container_width=True, key="phone_status_table")
+        
+        st.info("""
+        Phone numbers are validated and formatted according to these rules:
+        - Ireland (IE): +353 format
+        - UK: +44 format
+        - US/Canada: +1 (XXX) XXX-XXXX format
+        - UAE: +971 format
+        - Philippines: +63 format
+        - Denmark: +45 format
+        - Other: International format with country code
+        
+        Color coding:
+        🟢 Green: Valid phone numbers (will be included in export)
+        🔴 Red: Invalid numbers (missing, too short/long)
+        🟡 Yellow: Unknown format
+        
+        Only valid phone numbers will be included in the contact export.
+        """)
 
     # — Service Mix —
     with tabs[4]:
@@ -238,45 +288,71 @@ if st.session_state.fetch_complete and not st.session_state.appointment_data.emp
     # — Contact Export —
     with tabs[6]:
         st.header("Contact Export")
-        st.write("Export patient contacts for Microsoft Outlook")
         
-        # Prepare contacts data
-        contacts_df = df[["Customer", "Email", "Phone"]].drop_duplicates()
-        contacts_df = contacts_df[contacts_df["Email"].notna()]  # Remove rows without email
+        # Create two columns for the export and validation sections
+        export_col, validation_col = st.columns(2)
         
-        # Add export options
-        st.write("#### Export Options")
-        include_phone = st.checkbox("Include phone numbers", True)
-        
-        # Create CSV content
-        if include_phone:
-            export_df = contacts_df
-        else:
-            export_df = contacts_df[["Customer", "Email"]]
+        with export_col:
+            st.write("### Export Contacts")
+            st.write("Export patient contacts in Microsoft Outlook format")
             
-        # Download button
-        if not export_df.empty:
-            csv = export_df.to_csv(index=False)
-            st.download_button(
-                "📥 Download Contacts CSV",
-                csv,
-                "access_care_contacts.csv",
-                "text/csv",
-                key="download-contacts"
-            )
+            # Prepare contacts data with proper Outlook fields
+            outlook_contacts = prepare_outlook_contacts(df)
             
-            st.info("""
-            To import contacts into Outlook:
-            1. Download the CSV file
-            2. Open Outlook
-            3. Go to People (Contacts)
-            4. Click 'Import Contacts' or 'Import from file'
-            5. Select the downloaded CSV file
-            6. Map the columns to Outlook contact fields
-            7. Complete the import
-            """)
-        else:
-            st.warning("No contacts available for export")
+            if not outlook_contacts.empty:
+                # Show statistics
+                st.write("#### Export Statistics")
+                total_contacts = len(outlook_contacts)
+                total_with_phone = len(outlook_contacts[outlook_contacts["Business Phone"] != ""])
+                
+                stats_col1, stats_col2 = st.columns(2)
+                with stats_col1:
+                    st.metric("Total Contacts", total_contacts)
+                with stats_col2:
+                    st.metric("With Valid Phone", total_with_phone)
+                
+                # Show preview of contacts
+                st.write("#### Preview")
+                st.dataframe(
+                    outlook_contacts[["First Name", "Last Name", "E-mail Address", "Business Phone"]].head(),
+                    use_container_width=True,
+                    key="contact_preview"
+                )
+                
+                # Download button
+                csv = outlook_contacts.to_csv(index=False)
+                st.download_button(
+                    "📥 Download Outlook Contacts CSV",
+                    csv,
+                    "access_care_contacts.csv",
+                    "text/csv",
+                    key="download-contacts"
+                )
+                
+                st.info("""
+                To import contacts into Outlook:
+                1. Open Outlook
+                2. Go to File > Open & Export > Import/Export
+                3. Choose 'Import from another program or file'
+                4. Select 'Comma Separated Values'
+                5. Browse to the downloaded CSV file
+                6. Choose the Contacts folder as destination
+                7. Click Finish
+                
+                Note: Duplicate phone numbers have been removed, keeping the first occurrence.
+                """)
+            else:
+                st.warning("No contacts available for export")
+        
+        with validation_col:
+            st.write("### Phone Number Distribution")
+            if phone_pie:
+                st.plotly_chart(phone_pie, use_container_width=True, key="export_phone_pie")
+            
+            # Show country distribution
+            st.write("### Country Distribution")
+            if phone_tree:
+                st.plotly_chart(phone_tree, use_container_width=True, key="export_phone_tree")
 
 else:
     st.info("Select filters and click 'Fetch Data' to begin analysis")

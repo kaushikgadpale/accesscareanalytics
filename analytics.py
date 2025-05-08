@@ -3,10 +3,29 @@ import streamlit as st
 import plotly.express as px
 from config import LOCAL_TZ
 
+def analyze_service_counts_per_patient(df):
+    """Analyze how many services each patient has taken"""
+    if df.empty:
+        return pd.DataFrame()
+    
+    # Group by email and count unique services
+    service_counts = (df.groupby("Email")
+                     .agg({"Service": "nunique"})
+                     .reset_index())
+    
+    # Create distribution of service counts
+    service_dist = (service_counts["Service"]
+                   .value_counts()
+                   .reset_index())
+    service_dist.columns = ["Number_of_Services", "Patient_Count"]
+    service_dist = service_dist.sort_values("Number_of_Services")
+    
+    return service_dist
+
 def analyze_patients(df):
     """Analyze patient data and return unique patients, booking frequency, and service usage"""
     if df.empty:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     
     # Get unique patients with their most recent appointment
     unique_patients = (df[["Email", "Customer", "Phone", "Start Date"]]
@@ -52,7 +71,10 @@ def analyze_patients(df):
     service_usage.columns = ["Email", "Customer", "Service_Count", "Services", 
                            "Preferred_Business", "Avg_Duration"]
     
-    return unique_patients, booking_freq, service_usage
+    # Get service counts per patient
+    service_counts_dist = analyze_service_counts_per_patient(df)
+    
+    return unique_patients, booking_freq, service_usage, service_counts_dist
 
 def analyze_service_mix(df):
     """Analyze service mix and return service counts and duration analysis"""
