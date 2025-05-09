@@ -4,7 +4,7 @@ from datetime import datetime
 import pytz
 from config import LOCAL_TZ
 from azure.identity import ClientSecretCredential
-from msgraph.core._graph_client import GraphClient
+from msgraph_core import GraphClient
 import os
 from dotenv import load_dotenv
 
