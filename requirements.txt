@@ -4,10 +4,12 @@ pytz
 pandas
 numpy
 plotly
-azure-identity
+azure-identity>=1.15.0
 
 # For webhook server and env loading
 fastapi
 uvicorn
 python-dotenv
 msal
+
+msgraph-sdk>=1.0.0

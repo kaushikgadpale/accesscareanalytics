@@ -1,10 +1,28 @@
-import requests
+import streamlit as st
 import pandas as pd
 from datetime import datetime
-from config import LOCAL_TZ, GRAPH_API_BASE
-from auth import get_auth_headers
-import streamlit as st
 import pytz
+from config import LOCAL_TZ
+from msgraph import GraphServiceClient
+from azure.identity import ClientSecretCredential
+from kiota_abstractions.request_configuration import RequestConfiguration
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+def get_graph_client():
+    """Initialize Microsoft Graph client"""
+    try:
+        credential = ClientSecretCredential(
+            tenant_id=os.getenv('AZURE_TENANT_ID'),
+            client_id=os.getenv('AZURE_CLIENT_ID'),
+            client_secret=os.getenv('AZURE_CLIENT_SECRET')
+        )
+        return GraphServiceClient(credential)
+    except Exception as e:
+        st.error(f"Failed to initialize Graph client: {str(e)}")
+        return None
 
 def parse_iso_duration(duration_str):
     """Parse ISO 8601 duration string to minutes
@@ -38,46 +56,37 @@ def parse_iso_duration(duration_str):
     
     return minutes
 
-def fetch_businesses():
-    """Fetch all booking businesses from Microsoft Graph"""
-    headers = get_auth_headers()
-    if not headers:
-        st.error("Failed to get authentication headers")
-        return []
-    
+async def fetch_businesses():
+    """Fetch all booking businesses using Microsoft Graph SDK"""
     try:
-        response = requests.get(
-            "https://graph.microsoft.com/v1.0/solutions/bookingBusinesses",
-            headers=headers
-        )
-        response.raise_for_status()
-        businesses = [
-            {"id": biz["id"], "name": biz["displayName"]} 
-            for biz in response.json().get("value", [])
-        ]
-        if not businesses:
+        graph_client = get_graph_client()
+        if not graph_client:
+            return []
+        
+        result = await graph_client.solutions.booking_businesses.get()
+        if not result:
             st.warning("No businesses found in your Microsoft Bookings account")
+            return []
+            
+        businesses = [
+            {"id": biz.id, "name": biz.display_name} 
+            for biz in result.value
+        ]
         return businesses
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 403:
-            st.error("Permission denied. Please ensure the app has Bookings.Read.All permission")
-        else:
-            st.error(f"HTTP error occurred: {str(e)}")
-        return []
     except Exception as e:
         st.error(f"Failed to fetch businesses: {str(e)}")
         return []
 
-def fetch_appointments(businesses, start_date, end_date, max_results):
-    """Fetch appointments for selected businesses using calendarView"""
-    headers = get_auth_headers()
-    if not headers:
+async def fetch_appointments(businesses, start_date, end_date, max_results):
+    """Fetch appointments using Microsoft Graph SDK"""
+    graph_client = get_graph_client()
+    if not graph_client:
         return []
     
     appointments = []
     progress_bar = st.progress(0)
     
-    # Format dates for API - ensure we use UTC for the API request
+    # Format dates for API - ensure we use UTC
     start_datetime = datetime.combine(start_date, datetime.min.time()).astimezone(LOCAL_TZ).astimezone(pytz.UTC)
     end_datetime = datetime.combine(end_date, datetime.max.time()).astimezone(LOCAL_TZ).astimezone(pytz.UTC)
     
@@ -94,17 +103,17 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
     
     # First get all businesses if not provided
     if not businesses:
-        businesses = fetch_businesses()
+        businesses = await fetch_businesses()
     
     for idx, business in enumerate(businesses):
         try:
-            # Get business ID and name - handle both string and dict cases
+            # Get business ID and name
             if isinstance(business, dict):
                 business_id = business["id"]
                 business_name = business["name"]
             else:
                 # If it's just a string (business name), fetch the ID
-                all_businesses = fetch_businesses()
+                all_businesses = await fetch_businesses()
                 business_info = next((b for b in all_businesses if b["name"] == business), None)
                 if not business_info:
                     st.warning(f"Could not find business ID for {business}")
@@ -112,23 +121,26 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_id = business_info["id"]
                 business_name = business
             
-            # Use calendarView endpoint with date range
-            url = f"{GRAPH_API_BASE}/solutions/bookingBusinesses/{business_id}/calendarView"
-            params = {
+            # Use calendarView with SDK
+            query_params = {
                 'start': start_str,
                 'end': end_str,
                 '$top': max_results
             }
             
-            response = requests.get(url, headers=headers, params=params)
-            response.raise_for_status()
+            result = await graph_client.solutions.booking_businesses.by_booking_business_id(business_id).calendar_view.get(
+                request_configuration=RequestConfiguration(query_parameters=query_params)
+            )
             
-            for appt in response.json().get("value", []):
+            if not result:
+                continue
+                
+            for appt in result.value:
                 try:
-                    start_dt = datetime.fromisoformat(appt["startDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
+                    start_dt = datetime.fromisoformat(appt.start_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     end_dt = None
-                    if appt.get("endDateTime"):
-                        end_dt = datetime.fromisoformat(appt["endDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
+                    if appt.end_date_time:
+                        end_dt = datetime.fromisoformat(appt.end_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     
                     # Get customer information
                     customer_info = {
@@ -136,45 +148,45 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                         "location": None,
                         "timezone": "",
                         "notes": "",
-                        "email": appt.get("customerEmailAddress", "")
+                        "email": appt.customer_email_address or ""
                     }
                     
-                    if appt.get("customers") and len(appt["customers"]) > 0:
-                        customer = appt["customers"][0]
+                    if appt.customers and len(appt.customers) > 0:
+                        customer = appt.customers[0]
                         customer_info.update({
-                            "phone": customer.get("phone", ""),
-                            "location": customer.get("customerLocation", None),
-                            "timezone": customer.get("customerTimeZone", ""),
-                            "notes": appt.get("customerNotes", "")
+                            "phone": customer.phone or "",
+                            "location": customer.customer_location,
+                            "timezone": customer.customer_time_zone or "",
+                            "notes": appt.customer_notes or ""
                         })
                     
                     # Get cancellation details
                     cancellation_info = None
-                    if appt.get("cancellationDateTime"):
+                    if appt.cancellation_date_time:
                         cancellation_info = {
-                            "datetime": datetime.fromisoformat(appt["cancellationDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ),
-                            "reason": appt.get("cancellationReason", ""),
-                            "reason_text": appt.get("cancellationReasonText", ""),
-                            "notification_sent": appt.get("cancellationNotificationSent", False)
+                            "datetime": datetime.fromisoformat(appt.cancellation_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ),
+                            "reason": appt.cancellation_reason or "",
+                            "reason_text": appt.cancellation_reason_text or "",
+                            "notification_sent": appt.cancellation_notification_sent or False
                         }
                     
                     # Get service details
                     service_info = {
-                        "id": appt.get("serviceId", ""),
-                        "name": appt.get("serviceName", ""),
-                        "location": appt.get("serviceLocation", None),
-                        "notes": appt.get("serviceNotes", ""),
-                        "price": appt.get("price", 0),
-                        "price_type": appt.get("priceType", "")
+                        "id": appt.service_id or "",
+                        "name": appt.service_name or "",
+                        "location": appt.service_location,
+                        "notes": appt.service_notes or "",
+                        "price": appt.price or 0,
+                        "price_type": appt.price_type or ""
                     }
                     
                     # Get appointment metadata
-                    created_dt = datetime.fromisoformat(appt["createdDateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ) if appt.get("createdDateTime") else None
-                    last_updated_dt = datetime.fromisoformat(appt["lastUpdatedDateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ) if appt.get("lastUpdatedDateTime") else None
+                    created_dt = datetime.fromisoformat(appt.created_date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ) if appt.created_date_time else None
+                    last_updated_dt = datetime.fromisoformat(appt.last_updated_date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ) if appt.last_updated_date_time else None
                     
                     appointments.append({
                         "Business": business_name,
-                        "Customer": appt.get("customerName", ""),
+                        "Customer": appt.customer_name or "",
                         "Email": customer_info["email"],
                         "Phone": customer_info["phone"],
                         "Customer Location": str(customer_info["location"]) if customer_info["location"] else "",
@@ -192,24 +204,24 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                         "Last Updated": last_updated_dt,
                         "Duration (min)": (end_dt - start_dt).total_seconds() / 60 if end_dt else 0,
                         "Status": get_appointment_status(appt),
-                        "Notes": appt.get("customerNotes", ""),
-                        "ID": appt.get("id", ""),
+                        "Notes": appt.customer_notes or "",
+                        "ID": appt.id or "",
                         "Source": "Booking",
-                        "Is Online": appt.get("isLocationOnline", False),
-                        "Join URL": appt.get("joinWebUrl", ""),
-                        "SMS Enabled": appt.get("smsNotificationsEnabled", False),
-                        "Staff Members": ", ".join(appt.get("staffMemberIds", [])),
-                        "Additional Info": appt.get("additionalInformation", ""),
-                        "Appointment Label": appt.get("appointmentLabel", ""),
-                        "Self Service ID": appt.get("selfServiceAppointmentId", ""),
+                        "Is Online": appt.is_location_online or False,
+                        "Join URL": appt.join_web_url or "",
+                        "SMS Enabled": appt.sms_notifications_enabled or False,
+                        "Staff Members": ", ".join(appt.staff_member_ids or []),
+                        "Additional Info": appt.additional_information or "",
+                        "Appointment Label": appt.appointment_label or "",
+                        "Self Service ID": appt.self_service_appointment_id or "",
                         "Cancellation DateTime": cancellation_info["datetime"] if cancellation_info else None,
                         "Cancellation Reason": cancellation_info["reason"] if cancellation_info else "",
                         "Cancellation Details": cancellation_info["reason_text"] if cancellation_info else "",
                         "Cancellation Notification Sent": cancellation_info["notification_sent"] if cancellation_info else False,
-                        "Customer Can Manage": appt.get("isCustomerAllowedToManageBooking", False),
-                        "Opt Out of Email": appt.get("optOutOfCustomerEmail", False),
-                        "Pre Buffer (min)": parse_iso_duration(appt.get("preBuffer", "")),
-                        "Post Buffer (min)": parse_iso_duration(appt.get("postBuffer", "")),
+                        "Customer Can Manage": appt.is_customer_allowed_to_manage_booking or False,
+                        "Opt Out of Email": appt.opt_out_of_customer_email or False,
+                        "Pre Buffer (min)": parse_iso_duration(appt.pre_buffer or ""),
+                        "Post Buffer (min)": parse_iso_duration(appt.post_buffer or "")
                     })
                 except (KeyError, ValueError) as e:
                     st.warning(f"Skipping malformed appointment: {str(e)}")
@@ -253,8 +265,8 @@ def process_appointment(appt, business):
 
 def get_appointment_status(appt):
     """Determine appointment status"""
-    if appt.get("status") == "cancelled":
+    if getattr(appt, 'status', None) == 'cancelled':
         return "Cancelled"
-    if appt.get("completedDateTime"):
+    if getattr(appt, 'completed_date_time', None):
         return "Completed"
     return "Scheduled"
