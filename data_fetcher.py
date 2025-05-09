@@ -10,10 +10,11 @@ from msgraph import GraphServiceClient
 from msgraph.generated.solutions.booking_businesses.booking_businesses_request_builder import BookingBusinessesRequestBuilder
 from msgraph.generated.solutions.booking_businesses.item.calendar_view.calendar_view_request_builder import CalendarViewRequestBuilder
 from kiota_abstractions.base_request_configuration import RequestConfiguration
+import asyncio
 
 load_dotenv()
 
-def get_graph_client():
+async def get_graph_client():
     """Initialize Microsoft Graph client using Azure authentication"""
     try:
         credential = ClientSecretCredential(
@@ -53,15 +54,15 @@ def parse_iso_duration(duration_str):
     
     return minutes
 
-def fetch_businesses():
+async def fetch_businesses():
     """Fetch all booking businesses using Microsoft Graph SDK"""
     try:
-        graph_client = get_graph_client()
+        graph_client = await get_graph_client()
         if not graph_client:
             st.warning("Failed to initialize Graph client")
             return []
             
-        result = graph_client.solutions.booking_businesses.get()
+        result = await graph_client.solutions.booking_businesses.get()
         if not result:
             st.warning("No businesses found in your Microsoft Bookings account")
             return []
@@ -75,7 +76,7 @@ def fetch_businesses():
         st.error(f"Failed to fetch businesses: {str(e)}")
         return []
 
-def fetch_appointments(businesses, start_date, end_date, max_results):
+async def fetch_appointments(businesses, start_date, end_date, max_results):
     """Fetch appointments using Microsoft Graph SDK"""
     appointments = []
     progress_bar = st.progress(0)
@@ -97,9 +98,9 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
     
     # First get all businesses if not provided
     if not businesses:
-        businesses = fetch_businesses()
+        businesses = await fetch_businesses()
     
-    graph_client = get_graph_client()
+    graph_client = await get_graph_client()
     if not graph_client:
         st.error("Failed to initialize Graph client")
         return []
@@ -112,7 +113,7 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_name = business["name"]
             else:
                 # If it's just a string (business name), fetch the ID
-                all_businesses = fetch_businesses()
+                all_businesses = await fetch_businesses()
                 business_info = next((b for b in all_businesses if b["name"] == business), None)
                 if not business_info:
                     st.warning(f"Could not find business ID for {business}")
@@ -131,7 +132,7 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                 query_parameters=query_params
             )
 
-            result = graph_client.solutions.booking_businesses.by_booking_business_id(business_id).calendar_view.get(
+            result = await graph_client.solutions.booking_businesses.by_booking_business_id(business_id).calendar_view.get(
                 request_configuration=request_configuration
             )
             
