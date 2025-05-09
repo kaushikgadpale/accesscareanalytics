@@ -1,35 +1,35 @@
-# Access Care Analytics
+# Access Care Analytics Dashboard
 
-A Streamlit dashboard for analyzing Microsoft Bookings data, providing insights into appointments, patient behavior, and business performance.
+A comprehensive analytics dashboard for Microsoft Bookings data, providing insights into appointments, patient analysis, and contact management.
 
 ## Features
 
-- Real-time appointment tracking and analytics
-- Patient analysis and booking patterns
-- Service mix analysis
-- Client performance metrics
-- Phone number validation
-- Contact export for Microsoft Outlook
-- Webhook integration for live updates
+- 📋 Appointments Overview
+- 👥 Patient Analysis
+- 🏢 Client Overview
+- 📞 Phone Number Validation
+- 🧩 Service Mix Analysis
+- 🚨 Cancellation Insights
+- 📇 Contact Export (Outlook Format)
+- 📊 Real-time Updates via Webhooks
 
 ## Prerequisites
 
-- Python 3.8+
-- Microsoft Azure AD account with Bookings permissions
-- Valid Azure AD application credentials
+- Python 3.11 or higher
+- Microsoft Azure Account with Bookings API access
+- Azure AD Application with appropriate permissions
 
-## Required Permissions
+### Required Azure AD Permissions
 
-The Azure AD application requires the following Microsoft Graph permissions:
 - Bookings.Read.All
-- Bookings.ReadWrite.All
-- BookingsAppointment.ReadWrite.All
+- BookingsAppointment.Read.All
+- BookingsAppointment.ReadWrite.All (if using webhooks)
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/accesscareanalytics.git
+git clone <repository-url>
 cd accesscareanalytics
 ```
 
@@ -44,68 +44,78 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file with your Azure AD credentials:
+4. Set up environment variables:
+```bash
+cp .env.example .env
+```
+Edit .env with your Azure AD credentials and other configurations.
+
+## Configuration
+
+Required environment variables:
+
 ```env
-CLIENT_ID=your_client_id
-CLIENT_SECRET=your_client_secret
-TENANT_ID=your_tenant_id
-WEBHOOK_PUBLIC_URL=your_webhook_url
-CLIENT_STATE_SECRET=your_webhook_secret
+AZURE_TENANT_ID=your_tenant_id
+AZURE_CLIENT_ID=your_client_id
+AZURE_CLIENT_SECRET=your_client_secret
 ```
 
-## Usage
+Optional configurations:
+- `DEBUG`: Set to "True" for development
+- `ENVIRONMENT`: "development" or "production"
+- `TZ`: Timezone (default: UTC)
+- `WEBHOOK_PUBLIC_URL`: For real-time updates
+- `WEBHOOK_SECRET`: Webhook security
 
-1. Start the Streamlit app:
+## Running Locally
+
 ```bash
 streamlit run app.py
 ```
 
-2. Open your browser and navigate to the provided URL (usually http://localhost:8501)
+## Deployment
 
-3. Select businesses and date range in the sidebar
+### Deploying to Render
 
-4. Click "Fetch Data" to load appointments and view analytics
+1. Create a new Web Service on Render
+2. Connect your repository
+3. Configure the service:
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `streamlit run app.py`
+   - Environment Variables: Add all required variables
 
-## Features
+### Environment Variables on Render
 
-### Appointments Overview
-- View all appointments with filtering options
-- Track appointment status (Scheduled, Completed, Cancelled)
-- Monitor appointment metrics
+Make sure to set these in your Render dashboard:
+- `AZURE_TENANT_ID`
+- `AZURE_CLIENT_ID`
+- `AZURE_CLIENT_SECRET`
+- `ENVIRONMENT=production`
+- Other optional configurations
 
-### Patient Analysis
-- Track patient visit patterns
-- Analyze service preferences
-- Monitor cancellation rates
+## Troubleshooting
 
-### Client Overview
-- View business performance metrics
-- Track appointment volumes
-- Monitor cancellation rates
+Common issues and solutions:
 
-### Service Mix
-- Analyze service popularity
-- Track service duration patterns
-- Identify trending services
+1. Authentication Errors:
+   - Verify Azure AD credentials
+   - Check required permissions
+   - Ensure correct tenant ID
 
-### Phone Validation
-- Validate phone number formats
-- Track invalid numbers
-- Support for multiple regions
+2. Deployment Issues:
+   - Check Python version compatibility
+   - Verify all dependencies are installed
+   - Check environment variables
 
-### Contact Export
-- Export patient contacts
-- Microsoft Outlook compatible format
-- Customizable export options
+3. Data Loading Issues:
+   - Verify Microsoft Bookings access
+   - Check API permissions
+   - Confirm date range settings
 
-## Contributing
+## Support
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+For issues and feature requests, please create an issue in the repository.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+[Include your license information here] 

@@ -6,17 +6,21 @@ from datetime import datetime, timedelta
 load_dotenv()
 
 # Azure AD Configuration
-CLIENT_ID = os.getenv("CLIENT_ID")
-CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-TENANT_ID = os.getenv("TENANT_ID")
+CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("AZURE_CLIENT_SECRET")
+TENANT_ID = os.getenv("AZURE_TENANT_ID")
 
 # Graph API
-GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
+GRAPH_API_VERSION = os.getenv("GRAPH_API_VERSION", "v1.0")
+GRAPH_API_BASE = os.getenv("GRAPH_API_ENDPOINT", "https://graph.microsoft.com")
 
 # Application Settings
-LOCAL_TZ = pytz.timezone("US/Eastern")
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
+LOCAL_TZ = pytz.timezone(os.getenv("TZ", "UTC"))
 LOGO_PATH = "image002.png" if os.path.exists("image002.png") else None
-WEBHOOK_PUBLIC_URL = os.getenv("WEBHOOK_PUBLIC_URL", "https://msbookingsync.onrender.com")
+WEBHOOK_PUBLIC_URL = os.getenv("WEBHOOK_PUBLIC_URL")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 
 # Time Presets
 today = datetime.now(LOCAL_TZ).date()

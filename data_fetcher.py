@@ -3,9 +3,8 @@ import pandas as pd
 from datetime import datetime
 import pytz
 from config import LOCAL_TZ
-from msgraph.generated.solutions.booking_businesses.booking_businesses_request_builder import BookingBusinessesRequestBuilder
 from azure.identity import ClientSecretCredential
-from msgraph.core import GraphClient
+from msgraph.core._graph_client import GraphClient
 import os
 from dotenv import load_dotenv
 
@@ -19,7 +18,7 @@ def get_graph_client():
             client_id=os.getenv('AZURE_CLIENT_ID'),
             client_secret=os.getenv('AZURE_CLIENT_SECRET')
         )
-        return GraphClient(credential=credential)
+        return GraphClient(credential=credential, scopes=['https://graph.microsoft.com/.default'])
     except Exception as e:
         st.error(f"Failed to initialize Graph client: {str(e)}")
         return None
@@ -63,7 +62,7 @@ async def fetch_businesses():
         if not graph_client:
             return []
         
-        result = await graph_client.get("/solutions/bookingBusinesses")
+        result = await graph_client.get("/v1.0/solutions/bookingBusinesses")
         if not result:
             st.warning("No businesses found in your Microsoft Bookings account")
             return []
@@ -123,7 +122,7 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_name = business
             
             # Use calendarView with SDK
-            url = f"/solutions/bookingBusinesses/{business_id}/calendarView"
+            url = f"/v1.0/solutions/bookingBusinesses/{business_id}/calendarView"
             params = {
                 'start': start_str,
                 'end': end_str,
