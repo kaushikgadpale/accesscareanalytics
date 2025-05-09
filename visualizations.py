@@ -3,6 +3,13 @@ import plotly.express as px
 import pandas as pd
 
 
+def format_business_name(name, max_length=20):
+    """Format business name to a standard length with ellipsis if needed"""
+    if len(name) <= max_length:
+        return name
+    return name[:max_length-3] + "..."
+
+
 def create_patient_analysis_charts(unique_patients, booking_freq, service_usage, service_counts_dist):
     """Generate patient analysis visualizations"""
     # First row - Appointments and Services
@@ -63,6 +70,13 @@ def create_patient_analysis_charts(unique_patients, booking_freq, service_usage,
 
 def create_service_mix_charts(service_counts, service_duration):
     """Generate service mix visualizations"""
+    # Format business names
+    service_counts = service_counts.copy()
+    service_counts["Service"] = service_counts["Service"].apply(format_business_name)
+    
+    service_duration = service_duration.copy()
+    service_duration["Service"] = service_duration["Service"].apply(format_business_name)
+    
     col1, col2 = st.columns(2)
 
     with col1:
@@ -83,11 +97,16 @@ def create_service_mix_charts(service_counts, service_duration):
             title="Average Service Duration",
             color="Appointment_Count"
         )
+        fig.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig, use_container_width=True)
 
 
 def create_client_analysis_charts(client_analysis):
     """Generate client analysis visualizations"""
+    # Create a copy with formatted business names
+    client_analysis_formatted = client_analysis.copy()
+    client_analysis_formatted["Business_Short"] = client_analysis_formatted["Business"].apply(format_business_name)
+    
     # Overall metrics
     st.write("### Overall Business Metrics")
     total_appointments = client_analysis["Total_Appointments"].sum()
@@ -104,8 +123,19 @@ def create_client_analysis_charts(client_analysis):
     
     # Detailed client metrics
     st.write("### Detailed Client Metrics")
+    
+    # Simple styling without background gradient
+    def style_dataframe(df):
+        return df.style.format({
+            'Total_Appointments': '{:,.0f}',
+            'Cancellation_Rate': '{:.1f}%',
+            'Recurring_Patients': '{:,.0f}',
+            'Unique_Services': '{:,.0f}'
+        })
+    
+    styled_df = style_dataframe(client_analysis)
     st.dataframe(
-        client_analysis.style.background_gradient(subset=["Total_Appointments"], cmap="YlOrRd"),
+        styled_df,
         use_container_width=True,
         key="client_metrics"
     )
@@ -115,25 +145,29 @@ def create_client_analysis_charts(client_analysis):
 
     with col1:
         fig = px.bar(
-            client_analysis,
-            x="Business",
+            client_analysis_formatted,
+            x="Business_Short",
             y="Total_Appointments",
             title="Appointments by Business",
             color="Total_Appointments"
         )
-        fig.update_layout(xaxis_tickangle=-45)
+        fig.update_layout(
+            xaxis_tickangle=-45,
+            height=500  # Make the graph taller
+        )
         st.plotly_chart(fig, use_container_width=True, key="client_appointments")
 
     with col2:
         fig = px.scatter(
-            client_analysis,
+            client_analysis_formatted,
             x="Total_Appointments",
             y="Cancellation_Rate",
             size="Recurring_Patients",
             color="Unique_Services",
-            hover_data=["Business"],
+            hover_data=["Business"],  # Show full business name on hover
             title="Business Performance Matrix"
         )
+        fig.update_layout(height=500)  # Make the graph taller
         st.plotly_chart(fig, use_container_width=True, key="client_matrix")
 
 
@@ -141,6 +175,10 @@ def create_booking_trends(df):
     """Generate booking trend analysis visualizations"""
     if df.empty:
         return
+    
+    # Format business names in the dataframe
+    df = df.copy()
+    df["Business"] = df["Business"].apply(format_business_name)
     
     # Convert to datetime if not already
     df["Start Date"] = pd.to_datetime(df["Start Date"])
@@ -227,6 +265,10 @@ def create_booking_trends(df):
 
 def display_cancellation_insights(df):
     """Show detailed cancellation analytics"""
+    # Format business names in the dataframe
+    df = df.copy()
+    df["Business"] = df["Business"].apply(format_business_name)
+    
     st.write("## Cancellation Analysis")
     
     # Filter cancellations
