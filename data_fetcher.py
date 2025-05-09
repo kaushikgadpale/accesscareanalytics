@@ -6,6 +6,38 @@ from auth import get_auth_headers
 import streamlit as st
 import pytz
 
+def parse_iso_duration(duration_str):
+    """Parse ISO 8601 duration string to minutes
+    Examples:
+    PT30M -> 30 (30 minutes)
+    PT1H -> 60 (1 hour = 60 minutes)
+    PT1H30M -> 90 (1 hour 30 minutes = 90 minutes)
+    PT60S -> 1 (60 seconds = 1 minute)
+    """
+    if not duration_str:
+        return 0
+        
+    minutes = 0
+    # Remove PT prefix
+    duration = duration_str.replace('PT', '')
+    
+    # Handle hours
+    if 'H' in duration:
+        hours, duration = duration.split('H')
+        minutes += int(hours) * 60
+    
+    # Handle minutes
+    if 'M' in duration:
+        mins, duration = duration.split('M')
+        minutes += int(mins)
+    
+    # Handle seconds
+    if 'S' in duration:
+        secs = duration.replace('S', '')
+        minutes += int(secs) // 60
+    
+    return minutes
+
 def fetch_businesses():
     """Fetch all booking businesses from Microsoft Graph"""
     headers = get_auth_headers()
@@ -176,8 +208,8 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                         "Cancellation Notification Sent": cancellation_info["notification_sent"] if cancellation_info else False,
                         "Customer Can Manage": appt.get("isCustomerAllowedToManageBooking", False),
                         "Opt Out of Email": appt.get("optOutOfCustomerEmail", False),
-                        "Pre Buffer (min)": int(appt["preBuffer"].split("PT")[1].rstrip("M")) if appt.get("preBuffer") else 0,
-                        "Post Buffer (min)": int(appt["postBuffer"].split("PT")[1].rstrip("M")) if appt.get("postBuffer") else 0
+                        "Pre Buffer (min)": parse_iso_duration(appt.get("preBuffer", "")),
+                        "Post Buffer (min)": parse_iso_duration(appt.get("postBuffer", "")),
                     })
                 except (KeyError, ValueError) as e:
                     st.warning(f"Skipping malformed appointment: {str(e)}")
