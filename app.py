@@ -111,19 +111,19 @@ st.markdown(f"""
 # ─── Sidebar Controls ─────────────────────────────────────────────────────────
 with st.sidebar:
     if LOGO_PATH:
-        st.image(LOGO_PATH, width=120)
+    st.image(LOGO_PATH, width=120)
     st.title("Filters & Settings")
 
     # Businesses
     try:
-        businesses = fetch_businesses()
-        selected_businesses = []
-        if businesses:
+    businesses = fetch_businesses()
+    selected_businesses = []
+    if businesses:
             all_selected = st.checkbox("Select All Businesses", True, key="select_all_businesses")
             for idx, biz in enumerate(businesses):
                 checkbox_key = f"business_checkbox_{biz['name']}_{idx}"
                 if st.checkbox(biz["name"], all_selected, key=checkbox_key):
-                    selected_businesses.append(biz["name"])
+                selected_businesses.append(biz["name"])
         else:
             st.warning("No businesses found. Please check your Microsoft Bookings permissions.")
     except Exception as e:
@@ -155,7 +155,7 @@ with st.sidebar:
 col1, col2 = st.columns([1, 6])
 with col1:
     if LOGO_PATH:
-        st.image(LOGO_PATH, width=80)
+    st.image(LOGO_PATH, width=80)
 with col2:
     st.title("Access Care Analytics Dashboard")
     if st.session_state.get("last_updated"):
@@ -174,13 +174,13 @@ if fetch_button:
             if appointments:
                 # Filter out None values
                 appointments = [apt for apt in appointments if apt is not None]
-                if appointments:
-                    df = pd.DataFrame(appointments)
-                    df.set_index("ID", inplace=True)
-                    st.session_state.appointment_data = df
-                    st.session_state.fetch_complete = True
-                    st.session_state.last_updated = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                    st.success("Data loaded successfully!")
+            if appointments:
+                df = pd.DataFrame(appointments)
+                df.set_index("ID", inplace=True)
+                st.session_state.appointment_data = df
+                st.session_state.fetch_complete = True
+                st.session_state.last_updated = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                st.success("Data loaded successfully!")
                 else:
                     st.warning("No valid appointments found with current filters.")
             else:

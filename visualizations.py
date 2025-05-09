@@ -88,47 +88,327 @@ def create_service_mix_charts(service_counts, service_duration):
 
 def create_client_analysis_charts(client_analysis):
     """Generate client analysis visualizations"""
+    # Overall metrics
+    st.write("### Overall Business Metrics")
+    total_appointments = client_analysis["Total_Appointments"].sum()
+    avg_cancellation = client_analysis["Cancellation_Rate"].mean()
+    total_patients = client_analysis["Recurring_Patients"].sum()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Appointments", f"{total_appointments:,}")
+    with col2:
+        st.metric("Average Cancellation Rate", f"{avg_cancellation:.1f}%")
+    with col3:
+        st.metric("Total Unique Patients", f"{total_patients:,}")
+    
+    # Detailed client metrics
+    st.write("### Detailed Client Metrics")
+    st.dataframe(
+        client_analysis.style.background_gradient(subset=["Total_Appointments"], cmap="YlOrRd"),
+        use_container_width=True,
+        key="client_metrics"
+    )
+    
+    # Visualizations
     col1, col2 = st.columns(2)
 
     with col1:
         fig = px.bar(
-            client_analysis.sort_values("Total_Appointments", ascending=False).head(10),
+            client_analysis,
             x="Business",
             y="Total_Appointments",
-            title="Top Clients by Appointments",
+            title="Appointments by Business",
             color="Total_Appointments"
+        )
+        fig.update_layout(xaxis_tickangle=-45)
+        st.plotly_chart(fig, use_container_width=True, key="client_appointments")
+
+    with col2:
+        fig = px.scatter(
+            client_analysis,
+            x="Total_Appointments",
+            y="Cancellation_Rate",
+            size="Recurring_Patients",
+            color="Unique_Services",
+            hover_data=["Business"],
+            title="Business Performance Matrix"
+        )
+        st.plotly_chart(fig, use_container_width=True, key="client_matrix")
+
+
+def create_booking_trends(df):
+    """Generate booking trend analysis visualizations"""
+    if df.empty:
+        return
+    
+    # Convert to datetime if not already
+    df["Start Date"] = pd.to_datetime(df["Start Date"])
+    
+    # Daily booking counts
+    daily_bookings = df.groupby(
+        [df["Start Date"].dt.date, "Status"]
+    ).size().reset_index(name="Count")
+    
+    # Weekly booking counts
+    weekly_bookings = df.groupby(
+        [pd.Grouper(key="Start Date", freq="W"), "Status"]
+    ).size().reset_index(name="Count")
+    
+    # Monthly booking counts
+    monthly_bookings = df.groupby(
+        [pd.Grouper(key="Start Date", freq="M"), "Status"]
+    ).size().reset_index(name="Count")
+    
+    # Visualizations
+    st.write("### Daily Booking Trends")
+    fig_daily = px.line(
+        daily_bookings,
+        x="Start Date",
+        y="Count",
+        color="Status",
+        title="Daily Booking Volume"
+    )
+    st.plotly_chart(fig_daily, use_container_width=True, key="daily_trends")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("### Weekly Trends")
+        fig_weekly = px.line(
+            weekly_bookings,
+            x="Start Date",
+            y="Count",
+            color="Status",
+            title="Weekly Booking Volume"
+        )
+        st.plotly_chart(fig_weekly, use_container_width=True, key="weekly_trends")
+    
+    with col2:
+        st.write("### Monthly Trends")
+        fig_monthly = px.line(
+            monthly_bookings,
+            x="Start Date",
+            y="Count",
+            color="Status",
+            title="Monthly Booking Volume"
+        )
+        st.plotly_chart(fig_monthly, use_container_width=True, key="monthly_trends")
+    
+    # Business-wise growth
+    st.write("### Business Growth Analysis")
+    business_growth = df.groupby(
+        [pd.Grouper(key="Start Date", freq="M"), "Business"]
+    ).size().reset_index(name="Bookings")
+    
+    fig_growth = px.line(
+        business_growth,
+        x="Start Date",
+        y="Bookings",
+        color="Business",
+        title="Business Growth Over Time"
+    )
+    st.plotly_chart(fig_growth, use_container_width=True, key="business_growth")
+    
+    # Time of day analysis
+    st.write("### Booking Time Analysis")
+    df["Hour"] = df["Start Date"].dt.hour
+    hourly_bookings = df.groupby("Hour").size().reset_index(name="Count")
+    
+    fig_hourly = px.bar(
+        hourly_bookings,
+        x="Hour",
+        y="Count",
+        title="Popular Booking Hours",
+        labels={"Hour": "Hour of Day (24h)", "Count": "Number of Bookings"}
+    )
+    st.plotly_chart(fig_hourly, use_container_width=True, key="hourly_analysis")
+
+
+def display_cancellation_insights(df):
+    """Show detailed cancellation analytics"""
+    st.write("## Cancellation Analysis")
+    
+    # Filter cancellations
+    cancellations = df[df["Status"] == "Cancelled"].copy()
+    if cancellations.empty:
+        st.info("No cancellations found in the selected date range.")
+        return
+    
+    # Calculate overall metrics
+    total_bookings = len(df)
+    total_cancellations = len(cancellations)
+    cancellation_rate = (total_cancellations / total_bookings) * 100
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Cancellations", f"{total_cancellations:,}")
+    with col2:
+        st.metric("Overall Cancellation Rate", f"{cancellation_rate:.1f}%")
+    with col3:
+        st.metric("Total Affected Hours", f"{cancellations['Duration (min)'].sum() / 60:.1f}")
+    with col4:
+        notifications_sent = cancellations["Cancellation Notification Sent"].sum()
+        st.metric("Notifications Sent", f"{notifications_sent:,}")
+    
+    # Booking Channel Analysis
+    st.write("### Booking Channel Analysis")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Self-service vs. Staff bookings
+        self_service_counts = cancellations["Self Service ID"].notna().value_counts()
+        fig = px.pie(
+            values=self_service_counts.values,
+            names=["Staff Booked", "Self Service"],
+            title="Cancellations by Booking Channel",
+            hole=0.3
         )
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
+        # Online vs. In-person appointments
+        location_counts = cancellations["Is Online"].value_counts()
+        fig = px.pie(
+            values=location_counts.values,
+            names=["In Person", "Online"],
+            title="Cancelled Appointment Types",
+            hole=0.3
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Communication Preferences
+    st.write("### Communication Analysis")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # SMS and Email preferences
+        comm_prefs = pd.DataFrame({
+            "Channel": ["SMS Enabled", "Email Opted Out"],
+            "Count": [
+                cancellations["SMS Enabled"].sum(),
+                cancellations["Opt Out of Email"].sum()
+            ]
+        })
         fig = px.bar(
-            client_analysis.sort_values("Cancellation_Rate", ascending=False).head(10),
-            x="Business",
-            y="Cancellation_Rate",
-            title="Cancellation Rate by Client",
-            color="Cancellation_Rate"
+            comm_prefs,
+            x="Channel",
+            y="Count",
+            title="Communication Preferences",
+            color="Count"
         )
         st.plotly_chart(fig, use_container_width=True)
 
-
-def display_cancellation_insights(df):
-    """Show cancellation-specific analytics"""
-    cancellations = df[df["Status"] == "Cancelled"]
+    with col2:
+        # Customer management permissions
+        mgmt_counts = cancellations["Customer Can Manage"].value_counts()
+        fig = px.pie(
+            values=mgmt_counts.values,
+            names=["No Self-Management", "Can Self-Manage"],
+            title="Booking Management Permissions",
+            hole=0.3
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Time Analysis
+    st.write("### Timing Analysis")
     col1, col2 = st.columns(2)
 
     with col1:
+        # Time from creation to cancellation
+        cancellations["Booking Duration (Hours)"] = (
+            cancellations["Cancellation DateTime"] - cancellations["Created Date"]
+        ).dt.total_seconds() / 3600
+        
         fig = px.histogram(
             cancellations,
-            x="Start Date",
-            title="Cancellation Timeline",
+            x="Booking Duration (Hours)",
+            title="Time from Booking to Cancellation",
             nbins=20
         )
         st.plotly_chart(fig, use_container_width=True)
 
     with col2:
-        fig = px.sunburst(
-            cancellations,
-            path=["Business", "Service"],
-            title="Cancellation Breakdown"
+        # Buffer time analysis
+        buffer_data = pd.DataFrame({
+            "Type": ["Pre-appointment", "Post-appointment"],
+            "Average Minutes": [
+                cancellations["Pre Buffer (min)"].mean(),
+                cancellations["Post Buffer (min)"].mean()
+            ]
+        })
+        fig = px.bar(
+            buffer_data,
+            x="Type",
+            y="Average Minutes",
+            title="Average Buffer Times for Cancelled Appointments",
+            color="Type"
         )
         st.plotly_chart(fig, use_container_width=True)
+    
+    # Price Analysis
+    st.write("### Financial Impact")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Total value of cancelled appointments
+        total_value = cancellations["Price"].sum()
+        avg_value = cancellations["Price"].mean()
+        
+        value_metrics = pd.DataFrame({
+            "Metric": ["Total Value Lost", "Average Appointment Value"],
+            "Amount": [total_value, avg_value]
+        })
+        
+        fig = px.bar(
+            value_metrics,
+            x="Metric",
+            y="Amount",
+            title="Financial Impact of Cancellations",
+            color="Metric"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        # Price type distribution
+        price_type_counts = cancellations["Price Type"].value_counts()
+        fig = px.pie(
+            values=price_type_counts.values,
+            names=price_type_counts.index,
+            title="Price Type Distribution",
+            hole=0.3
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Staff Impact
+    st.write("### Staff Impact")
+    staff_cancellations = (
+        cancellations["Staff Members"]
+        .str.split(", ", expand=True)
+        .stack()
+        .value_counts()
+        .reset_index()
+    )
+    staff_cancellations.columns = ["Staff ID", "Cancelled Appointments"]
+    
+    fig = px.bar(
+        staff_cancellations.head(10),
+        x="Staff ID",
+        y="Cancelled Appointments",
+        title="Top 10 Staff Members by Cancellations",
+        color="Cancelled Appointments"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Detailed Cancellations Table
+    st.write("### Detailed Cancellation Records")
+    detailed_view = cancellations[[
+        "Business", "Customer", "Service", "Price",
+        "Start Date", "Created Date", "Cancellation DateTime",
+        "Is Online", "SMS Enabled", "Staff Members",
+        "Cancellation Reason", "Cancellation Details",
+        "Customer Location", "Service Location"
+    ]].sort_values("Start Date", ascending=False)
+    
+    st.dataframe(detailed_view, use_container_width=True)

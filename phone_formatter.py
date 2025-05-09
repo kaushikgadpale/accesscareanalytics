@@ -168,21 +168,103 @@ def prepare_outlook_contacts(df):
     # Map to Outlook contact fields
     outlook_contacts = pd.DataFrame({
         "First Name": contacts["First Name"],
+        "Middle Name": "",
         "Last Name": contacts.get("Last Name", ""),
+        "Title": "",
+        "Suffix": "",
+        "Nickname": "",
+        "Given Yomi": "",
+        "Surname Yomi": "",
         "E-mail Address": contacts["Email"],
-        "Business Phone": contacts["Business Phone"],
-        "Categories": "Access Care",
-        "Company": "Access Care Patient",
-        # Additional Outlook fields (empty by default)
-        "Job Title": "",
+        "E-mail 2 Address": "",
+        "E-mail 3 Address": "",
         "Home Phone": "",
+        "Home Phone 2": "",
+        "Business Phone": contacts["Business Phone"],
+        "Business Phone 2": "",
         "Mobile Phone": "",
+        "Car Phone": "",
+        "Other Phone": "",
+        "Primary Phone": "",
+        "Pager": "",
+        "Business Fax": "",
+        "Home Fax": "",
+        "Other Fax": "",
+        "Company Main Phone": "",
+        "Callback": "",
+        "Radio Phone": "",
+        "Telex": "",
+        "TTY/TDD Phone": "",
+        "IMAddress": "",
+        "Job Title": "",
+        "Department": "",
+        "Company": "",
+        "Office Location": "",
+        "Manager's Name": "",
+        "Assistant's Name": "",
+        "Assistant's Phone": "",
+        "Company Yomi": "",
+        "Business Street": "",
+        "Business City": "",
+        "Business State": "",
+        "Business Postal Code": "",
+        "Business Country/Region": "",
         "Home Street": "",
         "Home City": "",
         "Home State": "",
         "Home Postal Code": "",
         "Home Country/Region": "",
+        "Other Street": "",
+        "Other City": "",
+        "Other State": "",
+        "Other Postal Code": "",
+        "Other Country/Region": "",
+        "Personal Web Page": "",
+        "Spouse": "",
+        "Schools": "",
+        "Hobby": "",
+        "Location": "",
+        "Web Page": "",
+        "Birthday": "",
+        "Anniversary": "",
         "Notes": ""
     })
     
     return outlook_contacts
+
+def create_appointments_flow(df):
+    """Create appointments flow analysis visualization"""
+    if df.empty or "Creation Time" not in df.columns or "Booking Page" not in df.columns:
+        return None
+    
+    # Convert Creation Time to datetime if it's not already
+    df = df.copy()
+    df["Creation Date"] = pd.to_datetime(df["Creation Time"]).dt.date
+    
+    # Group by date and booking page
+    appointments_by_date = df.groupby(["Creation Date", "Booking Page"]).size().reset_index(name="Number of Bookings")
+    
+    # Create bar chart
+    bar = px.bar(
+        appointments_by_date,
+        x="Creation Date",
+        y="Number of Bookings",
+        color="Booking Page",
+        title="Appointments Flow by Booking Page",
+        labels={
+            "Creation Date": "Date",
+            "Number of Bookings": "Number of Appointments",
+            "Booking Page": "Booking Page"
+        }
+    )
+    
+    # Customize layout
+    bar.update_layout(
+        xaxis_tickangle=-45,
+        barmode="stack",
+        showlegend=True,
+        legend_title="Booking Pages",
+        height=600
+    )
+    
+    return bar
