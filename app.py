@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
 import threading
-import asyncio
 
 from config import (
     LOCAL_TZ,
@@ -168,9 +167,9 @@ if fetch_button:
     with st.spinner("Collecting data from multiple sources..."):
         try:
             # core appointments
-            appointments = asyncio.run(fetch_appointments(
+            appointments = fetch_appointments(
                 selected_businesses, start_date, end_date, max_records
-            ))
+            )
 
             if appointments:
                 # Filter out None values

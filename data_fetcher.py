@@ -77,7 +77,7 @@ def parse_iso_duration(duration_str):
     
     return minutes
 
-async def fetch_businesses():
+def fetch_businesses():
     """Fetch all booking businesses using Microsoft Graph API"""
     try:
         result = make_graph_request("/solutions/bookingBusinesses")
@@ -94,7 +94,7 @@ async def fetch_businesses():
         st.error(f"Failed to fetch businesses: {str(e)}")
         return []
 
-async def fetch_appointments(businesses, start_date, end_date, max_results):
+def fetch_appointments(businesses, start_date, end_date, max_results):
     """Fetch appointments using Microsoft Graph API"""
     appointments = []
     progress_bar = st.progress(0)
@@ -116,7 +116,7 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
     
     # First get all businesses if not provided
     if not businesses:
-        businesses = await fetch_businesses()
+        businesses = fetch_businesses()
     
     for idx, business in enumerate(businesses):
         try:
@@ -126,7 +126,7 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_name = business["name"]
             else:
                 # If it's just a string (business name), fetch the ID
-                all_businesses = await fetch_businesses()
+                all_businesses = fetch_businesses()
                 business_info = next((b for b in all_businesses if b["name"] == business), None)
                 if not business_info:
                     st.warning(f"Could not find business ID for {business}")
