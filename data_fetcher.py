@@ -83,10 +83,10 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
             
             for appt in response.json().get("value", []):
                 try:
-                start_dt = datetime.fromisoformat(appt["startDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
-                if not (start_date <= start_dt.date() <= end_date):
-                    continue
-                
+                    start_dt = datetime.fromisoformat(appt["startDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
+                    if not (start_date <= start_dt.date() <= end_date):
+                        continue
+                    
                     end_dt = None
                     if appt.get("endDateTime"):
                         end_dt = datetime.fromisoformat(appt["endDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
@@ -186,28 +186,28 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
 def process_appointment(appt, business):
     """Process individual appointment data"""
     try:
-    start_dt = datetime.fromisoformat(appt["startDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
-    end_dt = datetime.fromisoformat(appt["endDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ) if appt.get("endDateTime") else None
-    
+        start_dt = datetime.fromisoformat(appt["startDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
+        end_dt = datetime.fromisoformat(appt["endDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ) if appt.get("endDateTime") else None
+        
         # Safely get customer phone number
         phone = ""
         if appt.get("customers") and len(appt["customers"]) > 0:
             phone = appt["customers"][0].get("phone", "")
         
-    return {
-        "Business": business["name"],
-        "Customer": appt.get("customerName", ""),
-        "Email": appt.get("customerEmailAddress", ""),
+        return {
+            "Business": business["name"],
+            "Customer": appt.get("customerName", ""),
+            "Email": appt.get("customerEmailAddress", ""),
             "Phone": phone,
-        "Service": appt.get("serviceName", ""),
-        "Start Date": start_dt,
-        "End Date": end_dt,
-        "Duration (min)": (end_dt - start_dt).total_seconds() / 60 if end_dt else 0,
-        "Status": get_appointment_status(appt),
-        "Notes": appt.get("customerNotes", ""),
-        "ID": appt.get("id", ""),
-        "Source": "Booking"
-    }
+            "Service": appt.get("serviceName", ""),
+            "Start Date": start_dt,
+            "End Date": end_dt,
+            "Duration (min)": (end_dt - start_dt).total_seconds() / 60 if end_dt else 0,
+            "Status": get_appointment_status(appt),
+            "Notes": appt.get("customerNotes", ""),
+            "ID": appt.get("id", ""),
+            "Source": "Booking"
+        }
     except Exception as e:
         st.error(f"Error processing appointment: {str(e)}")
         return None
