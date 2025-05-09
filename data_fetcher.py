@@ -4,24 +4,46 @@ from datetime import datetime
 import pytz
 from config import LOCAL_TZ
 from azure.identity import ClientSecretCredential
-from msgraph_core import GraphClient
 import os
 from dotenv import load_dotenv
+import requests
 
 load_dotenv()
 
 def get_graph_client():
-    """Initialize Microsoft Graph client"""
+    """Initialize Microsoft Graph client using Azure authentication"""
     try:
         credential = ClientSecretCredential(
             tenant_id=os.getenv('AZURE_TENANT_ID'),
             client_id=os.getenv('AZURE_CLIENT_ID'),
             client_secret=os.getenv('AZURE_CLIENT_SECRET')
         )
-        return GraphClient(credential=credential, scopes=['https://graph.microsoft.com/.default'])
+        # Get access token for Microsoft Graph
+        token = credential.get_token("https://graph.microsoft.com/.default")
+        return token.token
     except Exception as e:
-        st.error(f"Failed to initialize Graph client: {str(e)}")
+        st.error(f"Failed to initialize Graph authentication: {str(e)}")
         return None
+
+def make_graph_request(endpoint, params=None):
+    """Make a request to Microsoft Graph API"""
+    token = get_graph_client()
+    if not token:
+        return None
+        
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    
+    url = f"https://graph.microsoft.com/v1.0{endpoint}"
+    response = requests.get(url, headers=headers, params=params)
+    
+    if response.status_code != 200:
+        st.error(f"Graph API request failed: {response.status_code} - {response.text}")
+        return None
+        
+    return response.json()
 
 def parse_iso_duration(duration_str):
     """Parse ISO 8601 duration string to minutes
@@ -56,21 +78,16 @@ def parse_iso_duration(duration_str):
     return minutes
 
 async def fetch_businesses():
-    """Fetch all booking businesses using Microsoft Graph SDK"""
+    """Fetch all booking businesses using Microsoft Graph API"""
     try:
-        graph_client = get_graph_client()
-        if not graph_client:
-            return []
-        
-        result = await graph_client.get("/v1.0/solutions/bookingBusinesses")
+        result = make_graph_request("/solutions/bookingBusinesses")
         if not result:
             st.warning("No businesses found in your Microsoft Bookings account")
             return []
             
-        response_data = await result.json()
         businesses = [
             {"id": biz["id"], "name": biz["displayName"]} 
-            for biz in response_data.get("value", [])
+            for biz in result.get("value", [])
         ]
         return businesses
     except Exception as e:
@@ -78,11 +95,7 @@ async def fetch_businesses():
         return []
 
 async def fetch_appointments(businesses, start_date, end_date, max_results):
-    """Fetch appointments using Microsoft Graph SDK"""
-    graph_client = get_graph_client()
-    if not graph_client:
-        return []
-    
+    """Fetch appointments using Microsoft Graph API"""
     appointments = []
     progress_bar = st.progress(0)
     
@@ -121,19 +134,17 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_id = business_info["id"]
                 business_name = business
             
-            # Use calendarView with SDK
-            url = f"/v1.0/solutions/bookingBusinesses/{business_id}/calendarView"
+            # Use calendarView with API
             params = {
                 'start': start_str,
                 'end': end_str,
                 '$top': max_results
             }
             
-            result = await graph_client.get(url, params=params)
-            if not result:
+            response_data = make_graph_request(f"/solutions/bookingBusinesses/{business_id}/calendarView", params=params)
+            if not response_data:
                 continue
                 
-            response_data = await result.json()
             for appt in response_data.get('value', []):
                 try:
                     start_dt = datetime.fromisoformat(appt['startDateTime']['dateTime'].replace('Z', '+00:00')).astimezone(LOCAL_TZ)
