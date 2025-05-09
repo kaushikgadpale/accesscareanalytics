@@ -37,7 +37,7 @@ def fetch_businesses():
         return []
 
 def fetch_appointments(businesses, start_date, end_date, max_results):
-    """Fetch appointments for selected businesses using BookingsAppointment"""
+    """Fetch appointments for selected businesses using calendarView"""
     headers = get_auth_headers()
     if not headers:
         return []
@@ -55,6 +55,10 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
         start_datetime = now
     if end_datetime > now:
         end_datetime = now
+    
+    # Format datetime strings for API
+    start_str = start_datetime.isoformat().replace('+00:00', 'Z')
+    end_str = end_datetime.isoformat().replace('+00:00', 'Z')
     
     # First get all businesses if not provided
     if not businesses:
@@ -76,17 +80,20 @@ def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_id = business_info["id"]
                 business_name = business
             
-            # Use BookingsAppointment endpoint
-            url = f"{GRAPH_API_BASE}/solutions/bookingBusinesses/{business_id}/bookingAppointments?$top={max_results}"
-            response = requests.get(url, headers=headers)
+            # Use calendarView endpoint with date range
+            url = f"{GRAPH_API_BASE}/solutions/bookingBusinesses/{business_id}/calendarView"
+            params = {
+                'start': start_str,
+                'end': end_str,
+                '$top': max_results
+            }
+            
+            response = requests.get(url, headers=headers, params=params)
             response.raise_for_status()
             
             for appt in response.json().get("value", []):
                 try:
                     start_dt = datetime.fromisoformat(appt["startDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
-                    if not (start_date <= start_dt.date() <= end_date):
-                        continue
-                    
                     end_dt = None
                     if appt.get("endDateTime"):
                         end_dt = datetime.fromisoformat(appt["endDateTime"]["dateTime"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
