@@ -7,6 +7,7 @@ from azure.identity import ClientSecretCredential
 import os
 from dotenv import load_dotenv
 import requests
+from auth import get_auth_headers
 
 load_dotenv()
 
@@ -27,23 +28,21 @@ def get_graph_client():
 
 def make_graph_request(endpoint, params=None):
     """Make a request to Microsoft Graph API"""
-    token = get_graph_client()
-    if not token:
+    headers = get_auth_headers()
+    if not headers:
+        st.error("Failed to get authentication headers")
         return None
         
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-    
     url = f"https://graph.microsoft.com/v1.0{endpoint}"
-    response = requests.get(url, headers=headers, params=params)
-    
-    if response.status_code != 200:
-        st.error(f"Graph API request failed: {response.status_code} - {response.text}")
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Graph API request failed: {str(e)}")
+        if hasattr(e.response, 'text'):
+            st.error(f"Response: {e.response.text}")
         return None
-        
-    return response.json()
 
 def parse_iso_duration(duration_str):
     """Parse ISO 8601 duration string to minutes
