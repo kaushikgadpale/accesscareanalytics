@@ -148,7 +148,9 @@ def prepare_outlook_contacts(df):
         return pd.DataFrame()
     
     # Get unique contacts with formatted phones
-    contacts = df[["Customer", "Email", "Phone"]].drop_duplicates()
+    contacts = df[["Customer", "Email", "Phone", "ID", "Business", 
+                   "Service Location", "Customer Location", "Customer Timezone",
+                   "Is Online", "Join URL", "Staff Members"]].drop_duplicates()
     formatted_phones = pd.DataFrame([
         format_phone_strict(phone) for phone in contacts["Phone"]
     ], columns=["Formatted Phone", "Phone Status"])
@@ -163,13 +165,39 @@ def prepare_outlook_contacts(df):
     contacts = contacts[contacts["Business Phone"] != ""].drop_duplicates(subset=["Business Phone"])
     
     # Split customer name into first and last name
-    contacts[["First Name", "Last Name"]] = contacts["Customer"].str.split(" ", n=1, expand=True)
+    name_parts = contacts["Customer"].str.split(" ", n=1, expand=True)
+    contacts["First Name"] = name_parts[0] if 0 in name_parts else ""
+    contacts["Last Name"] = name_parts[1] if 1 in name_parts else ""
     
-    # Map to Outlook contact fields
+    # Create notes field with form answers for each contact
+    contact_notes = {}
+    for idx, row in contacts.iterrows():
+        contact_id = row['ID']
+        
+        # Find the original appointment with this ID
+        if contact_id in df['ID'].values:
+            appt = df[df['ID'] == contact_id].iloc[0]
+            notes = []
+            
+            # Collect all form answers
+            form_fields = [col for col in appt.index if col.startswith('Form:')]
+            if form_fields:
+                for field in form_fields:
+                    if pd.notna(appt[field]) and appt[field]:
+                        question = field.replace('Form: ', '')
+                        answer = appt[field]
+                        notes.append(f"{question}: {answer}")
+            
+            contact_notes[contact_id] = "\n".join(notes)
+    
+    # Add notes to contacts dataframe
+    contacts['Notes'] = contacts['ID'].map(lambda x: contact_notes.get(x, ""))
+    
+    # Map to Outlook contact fields - keeping only the standard Outlook fields
     outlook_contacts = pd.DataFrame({
         "First Name": contacts["First Name"],
         "Middle Name": "",
-        "Last Name": contacts.get("Last Name", ""),
+        "Last Name": contacts["Last Name"],
         "Title": "",
         "Suffix": "",
         "Nickname": "",
@@ -182,7 +210,7 @@ def prepare_outlook_contacts(df):
         "Home Phone 2": "",
         "Business Phone": contacts["Business Phone"],
         "Business Phone 2": "",
-        "Mobile Phone": "",
+        "Mobile Phone": contacts["Business Phone"],
         "Car Phone": "",
         "Other Phone": "",
         "Primary Phone": "",
@@ -196,11 +224,11 @@ def prepare_outlook_contacts(df):
         "Telex": "",
         "TTY/TDD Phone": "",
         "IMAddress": "",
-        "Job Title": "",
-        "Department": "",
-        "Company": "",
-        "Office Location": "",
-        "Manager's Name": "",
+        "Job Title": "",  # Leaving job title blank as requested
+        "Department": contacts["Service Location"],  # Service location as Department
+        "Company": contacts["Business"],  # Business name as Company (patient's booking site)
+        "Office Location": contacts["Customer Location"],  # Customer location as Office
+        "Manager's Name": contacts["Staff Members"],  # Staff members as Manager
         "Assistant's Name": "",
         "Assistant's Phone": "",
         "Company Yomi": "",
@@ -208,7 +236,7 @@ def prepare_outlook_contacts(df):
         "Business City": "",
         "Business State": "",
         "Business Postal Code": "",
-        "Business Country/Region": "",
+        "Business Country/Region": contacts["Customer Timezone"],  # Customer timezone as Country/Region
         "Home Street": "",
         "Home City": "",
         "Home State": "",
@@ -224,10 +252,10 @@ def prepare_outlook_contacts(df):
         "Schools": "",
         "Hobby": "",
         "Location": "",
-        "Web Page": "",
+        "Web Page": contacts.apply(lambda x: x["Join URL"] if x["Is Online"] else "", axis=1),  # Meeting URL as Web Page
         "Birthday": "",
         "Anniversary": "",
-        "Notes": ""
+        "Notes": contacts["Notes"]
     })
     
     return outlook_contacts
