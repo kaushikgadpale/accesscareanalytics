@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from config import LOCAL_TZ
 from azure.identity import ClientSecretCredential
@@ -76,6 +76,39 @@ async def fetch_businesses():
         st.error(f"Failed to fetch businesses: {str(e)}")
         return []
 
+async def fetch_business_details(business_id):
+    """Fetch detailed information about a booking business"""
+    try:
+        graph_client = await get_graph_client()
+        if not graph_client:
+            return None
+            
+        result = await graph_client.solutions.booking_businesses.by_booking_business_id(business_id).get()
+        if not result:
+            return None
+            
+        return {
+            "id": result.id,
+            "name": result.display_name,
+            "business_type": result.business_type,
+            "default_currency_iso": result.default_currency_iso,
+            "email": result.email,
+            "phone": result.phone,
+            "website_url": result.website_url,
+            "scheduling_policy": {
+                "allow_staff_selection": result.scheduling_policy.allow_staff_selection if hasattr(result, 'scheduling_policy') else False,
+                "time_slot_interval": result.scheduling_policy.time_slot_interval if hasattr(result, 'scheduling_policy') else 30,
+                "minimum_lead_time": result.scheduling_policy.minimum_lead_time if hasattr(result, 'scheduling_policy') else 0,
+                "maximum_advance": result.scheduling_policy.maximum_advance if hasattr(result, 'scheduling_policy') else 30
+            },
+            "business_hours": result.business_hours if hasattr(result, 'business_hours') else [],
+            "services": result.services if hasattr(result, 'services') else [],
+            "staff_members": result.staff_members if hasattr(result, 'staff_members') else []
+        }
+    except Exception as e:
+        st.error(f"Failed to fetch business details: {str(e)}")
+        return None
+
 async def fetch_appointments(businesses, start_date, end_date, max_results):
     """Fetch appointments using Microsoft Graph SDK"""
     appointments = []
@@ -121,6 +154,9 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 business_id = business_info["id"]
                 business_name = business
             
+            # Fetch business details
+            business_details = await fetch_business_details(business_id)
+            
             # Use calendarView with SDK
             query_params = CalendarViewRequestBuilder.CalendarViewRequestBuilderGetQueryParameters(
                 start=start_str,
@@ -143,48 +179,56 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
             st.write(f"Processing {len(result.value)} appointments for {business_name}")
             for appt in result.value:
                 try:
-                    # Debug logging for entire appointment object
-                    st.write(f"\nDebug - Full Appointment Object for {business_name}:")
-                    st.write(f"Appointment Type: {type(appt)}")
-                    st.write(f"Appointment ID: {getattr(appt, 'id', 'N/A')}")
-                    st.write(f"All Appointment Attributes: {dir(appt)}")
-                    st.write(f"Appointment Dict: {appt.__dict__}")
+                    # Get customer information
+                    customer_info = {
+                        "phone": getattr(appt, 'customer_phone', ''),
+                        "location": None,
+                        "timezone": getattr(appt, 'customer_time_zone', ''),
+                        "notes": getattr(appt, 'customer_notes', ''),
+                        "email": getattr(appt, 'customer_email_address', '')
+                    }
                     
-                    # Debug logging for date/time structure
-                    st.write(f"\nDebug - Business: {business_name}")
-                    st.write(f"Debug - Start DateTime Type: {type(appt.start_date_time)}")
-                    st.write(f"Debug - Start DateTime Value: {appt.start_date_time}")
-                    if hasattr(appt.start_date_time, '__dict__'):
-                        st.write(f"Debug - Start DateTime Attributes: {dir(appt.start_date_time)}")
+                    # Process customer form answers
+                    form_answers = {}
+                    if appt.customers and len(appt.customers) > 0:
+                        customer = appt.customers[0]
+                        if hasattr(customer, 'custom_question_answers'):
+                            for answer in customer.custom_question_answers:
+                                question = getattr(answer, 'question', '')
+                                ans = getattr(answer, 'answer', '')
+                                form_answers[question] = ans
                     
-                    if appt.end_date_time:
-                        st.write(f"Debug - End DateTime Type: {type(appt.end_date_time)}")
-                        st.write(f"Debug - End DateTime Value: {appt.end_date_time}")
-                        if hasattr(appt.end_date_time, '__dict__'):
-                            st.write(f"Debug - End DateTime Attributes: {dir(appt.end_date_time)}")
+                    # Get service details
+                    service_info = {
+                        "id": getattr(appt, 'service_id', ''),
+                        "name": getattr(appt, 'service_name', ''),
+                        "location": None,
+                        "notes": getattr(appt, 'service_notes', ''),
+                        "price": float(getattr(appt, 'price', 0)),
+                        "price_type": str(getattr(appt, 'price_type', 'notSet'))
+                    }
                     
+                    # Get service location
+                    if hasattr(appt, 'service_location'):
+                        service_location = appt.service_location
+                        service_info["location"] = {
+                            "name": getattr(service_location, 'display_name', ''),
+                            "address": getattr(service_location, 'address', None)
+                        }
+                    
+                    # Get appointment metadata
                     start_dt = datetime.fromisoformat(appt.start_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     end_dt = None
                     if appt.end_date_time:
                         end_dt = datetime.fromisoformat(appt.end_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     
-                    # Get customer information
-                    customer_info = {
-                        "phone": "",
-                        "location": None,
-                        "timezone": "",
-                        "notes": "",
-                        "email": appt.customer_email_address or ''
-                    }
+                    created_dt = None
+                    if hasattr(appt, 'created_date_time'):
+                        created_dt = appt.created_date_time.astimezone(LOCAL_TZ)
                     
-                    if appt.customers and len(appt.customers) > 0:
-                        customer = appt.customers[0]
-                        customer_info.update({
-                            "phone": getattr(customer, 'phone', ''),
-                            "location": getattr(customer, 'location', None),
-                            "timezone": getattr(customer, 'time_zone', ''),
-                            "notes": appt.customer_notes or ''
-                        })
+                    last_updated_dt = None
+                    if hasattr(appt, 'last_updated_date_time'):
+                        last_updated_dt = appt.last_updated_date_time.astimezone(LOCAL_TZ)
                     
                     # Get cancellation details
                     cancellation_info = None
@@ -196,23 +240,19 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                             "notification_sent": getattr(appt, 'cancellation_notification_sent', False)
                         }
                     
-                    # Get service details
-                    service_info = {
-                        "id": appt.service_id or '',
-                        "name": appt.service_name or '',
-                        "location": appt.service_location,
-                        "notes": appt.service_notes or '',
-                        "price": getattr(appt, 'price', 0),
-                        "price_type": getattr(appt, 'price_type', '')
-                    }
+                    # Calculate duration in minutes
+                    duration_minutes = 0
+                    if end_dt and start_dt:
+                        duration_minutes = (end_dt - start_dt).total_seconds() / 60
                     
-                    # Get appointment metadata
-                    created_dt = datetime.fromisoformat(appt.created_date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ) if appt.created_date_time else None
-                    last_updated_dt = datetime.fromisoformat(appt.last_updated_date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ) if appt.last_updated_date_time else None
+                    # Get staff members
+                    staff_members = []
+                    if hasattr(appt, 'staff_member_ids'):
+                        staff_members = appt.staff_member_ids
                     
                     appointment_data = {
                         "Business": business_name,
-                        "Customer": appt.customer_name or '',
+                        "Customer": getattr(appt, 'customer_name', ''),
                         "Email": customer_info["email"],
                         "Phone": customer_info["phone"],
                         "Customer Location": str(customer_info["location"]) if customer_info["location"] else "",
@@ -220,7 +260,7 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         "Customer Notes": customer_info["notes"],
                         "Service": service_info["name"],
                         "Service ID": service_info["id"],
-                        "Service Location": str(service_info["location"]) if service_info["location"] else "",
+                        "Service Location": str(service_info["location"]["name"]) if service_info["location"] else "",
                         "Service Notes": service_info["notes"],
                         "Price": service_info["price"],
                         "Price Type": service_info["price_type"],
@@ -228,27 +268,38 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         "End Date": end_dt,
                         "Created Date": created_dt,
                         "Last Updated": last_updated_dt,
-                        "Duration (min)": (end_dt - start_dt).total_seconds() / 60 if end_dt else 0,
+                        "Duration (min)": duration_minutes,
                         "Status": get_appointment_status(appt),
-                        "Notes": appt.customer_notes or '',
-                        "ID": appt.id or '',
+                        "Notes": getattr(appt, 'customer_notes', ''),
+                        "ID": getattr(appt, 'id', ''),
                         "Source": "Booking",
                         "Is Online": getattr(appt, 'is_location_online', False),
                         "Join URL": getattr(appt, 'join_web_url', ''),
                         "SMS Enabled": getattr(appt, 'sms_notifications_enabled', False),
-                        "Staff Members": ", ".join(appt.staff_member_ids) if appt.staff_member_ids else '',
+                        "Staff Members": ", ".join(staff_members) if staff_members else '',
                         "Additional Info": getattr(appt, 'additional_information', ''),
                         "Appointment Label": getattr(appt, 'appointment_label', ''),
                         "Self Service ID": getattr(appt, 'self_service_appointment_id', ''),
+                        "Customer Can Manage": getattr(appt, 'is_customer_allowed_to_manage_booking', False),
+                        "Opt Out of Email": getattr(appt, 'opt_out_of_customer_email', False),
+                        "Pre Buffer (min)": getattr(appt, 'pre_buffer', timedelta(0)).total_seconds() / 60,
+                        "Post Buffer (min)": getattr(appt, 'post_buffer', timedelta(0)).total_seconds() / 60,
+                        "Filled Attendees": getattr(appt, 'filled_attendees_count', 0),
+                        "Max Attendees": getattr(appt, 'maximum_attendees_count', 0),
                         "Cancellation DateTime": cancellation_info["datetime"] if cancellation_info else None,
                         "Cancellation Reason": cancellation_info["reason"] if cancellation_info else "",
                         "Cancellation Details": cancellation_info["reason_text"] if cancellation_info else "",
                         "Cancellation Notification Sent": cancellation_info["notification_sent"] if cancellation_info else False,
-                        "Customer Can Manage": getattr(appt, 'is_customer_allowed_to_manage_booking', False),
-                        "Opt Out of Email": getattr(appt, 'opt_out_of_customer_email', False),
-                        "Pre Buffer (min)": parse_iso_duration(getattr(appt, 'pre_buffer', '')),
-                        "Post Buffer (min)": parse_iso_duration(getattr(appt, 'post_buffer', ''))
+                        "Business Type": business_details["business_type"] if business_details else "",
+                        "Business Email": business_details["email"] if business_details else "",
+                        "Business Phone": business_details["phone"] if business_details else "",
+                        "Business Website": business_details["website_url"] if business_details else ""
                     }
+                    
+                    # Add form answers to appointment data
+                    for question, answer in form_answers.items():
+                        appointment_data[f"Form: {question}"] = answer
+                    
                     appointments.append(appointment_data)
                     st.write(f"Successfully processed appointment for {appointment_data['Customer']} at {appointment_data['Start Date']}")
                 except (KeyError, ValueError) as e:

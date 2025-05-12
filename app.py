@@ -174,19 +174,126 @@ if fetch_button:
 
             if appointments:
                 # Filter out None values
-                appointments = [apt for apt in appointments if apt is not None]
-            if appointments:
+                appointments = [a for a in appointments if a is not None]
+                
+                # Convert to DataFrame
                 df = pd.DataFrame(appointments)
-                df.set_index("ID", inplace=True)
-                st.session_state.appointment_data = df
-                st.session_state.fetch_complete = True
-                st.session_state.last_updated = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                st.success("Data loaded successfully!")
+                
+                # Convert datetime columns
+                datetime_columns = ['Start Date', 'End Date', 'Created Date', 'Last Updated', 'Cancellation DateTime']
+                for col in datetime_columns:
+                    if col in df.columns:
+                        df[col] = pd.to_datetime(df[col])
+                
+                # Add date columns for analysis
+                df['Created Date Only'] = df['Created Date'].dt.date
+                df['Start Date Only'] = df['Start Date'].dt.date
+                df['Hour of Day'] = df['Created Date'].dt.hour
+                df['Day of Week'] = df['Created Date'].dt.day_name()
+                
+                # Store in session state
+                st.session_state['appointments_df'] = df
+                st.session_state['last_fetch'] = datetime.now()
+                
+                # Display success message
+                st.success(f"Successfully fetched {len(df)} appointments")
+                
+                # Display booking trends
+                st.subheader("📈 Booking Trends")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Daily booking creation trend
+                    daily_bookings = df.groupby('Created Date Only').size().reset_index(name='count')
+                    fig_daily = px.line(
+                        daily_bookings,
+                        x='Created Date Only',
+                        y='count',
+                        title='Daily Booking Creation Trend',
+                        labels={'Created Date Only': 'Date', 'count': 'Number of Bookings'}
+                    )
+                    st.plotly_chart(fig_daily, use_container_width=True)
+                
+                with col2:
+                    # Hourly booking distribution
+                    hourly_bookings = df.groupby('Hour of Day').size().reset_index(name='count')
+                    fig_hourly = px.bar(
+                        hourly_bookings,
+                        x='Hour of Day',
+                        y='count',
+                        title='Hourly Booking Distribution',
+                        labels={'Hour of Day': 'Hour', 'count': 'Number of Bookings'}
+                    )
+                    st.plotly_chart(fig_hourly, use_container_width=True)
+                
+                # Status changes and cancellations
+                st.subheader("🔄 Appointment Status Changes")
+                col3, col4 = st.columns(2)
+                
+                with col3:
+                    # Status distribution
+                    status_counts = df['Status'].value_counts().reset_index()
+                    status_counts.columns = ['Status', 'Count']
+                    fig_status = px.pie(
+                        status_counts,
+                        values='Count',
+                        names='Status',
+                        title='Appointment Status Distribution'
+                    )
+                    st.plotly_chart(fig_status, use_container_width=True)
+                
+                with col4:
+                    # Cancellation reasons
+                    if 'Cancellation Reason' in df.columns:
+                        cancellation_reasons = df[df['Cancellation Reason'].notna()]['Cancellation Reason'].value_counts().reset_index()
+                        cancellation_reasons.columns = ['Reason', 'Count']
+                        fig_cancellations = px.bar(
+                            cancellation_reasons,
+                            x='Reason',
+                            y='Count',
+                            title='Cancellation Reasons',
+                            labels={'Reason': 'Cancellation Reason', 'Count': 'Number of Cancellations'}
+                        )
+                        st.plotly_chart(fig_cancellations, use_container_width=True)
+                
+                # Business performance metrics
+                st.subheader("📊 Business Performance")
+                col5, col6 = st.columns(2)
+                
+                with col5:
+                    # Bookings by business
+                    business_bookings = df.groupby('Business').size().reset_index(name='count')
+                    fig_business = px.bar(
+                        business_bookings,
+                        x='Business',
+                        y='count',
+                        title='Bookings by Business',
+                        labels={'Business': 'Business Name', 'count': 'Number of Bookings'}
+                    )
+                    st.plotly_chart(fig_business, use_container_width=True)
+                
+                with col6:
+                    # Service popularity
+                    service_bookings = df.groupby('Service').size().reset_index(name='count')
+                    service_bookings = service_bookings.sort_values('count', ascending=False).head(10)
+                    fig_service = px.bar(
+                        service_bookings,
+                        x='Service',
+                        y='count',
+                        title='Top 10 Most Popular Services',
+                        labels={'Service': 'Service Name', 'count': 'Number of Bookings'}
+                    )
+                    st.plotly_chart(fig_service, use_container_width=True)
+                
+                # Display the data table
+                st.subheader("📋 Appointment Data")
+                st.dataframe(df)
+                
             else:
-                st.warning("No valid appointments found with current filters.")
-
+                st.warning("No appointments found in the selected date range")
+                
         except Exception as e:
-            st.error(f"Data fetch failed: {str(e)}")
+            st.error(f"Error fetching appointments: {str(e)}")
 
 
 # ─── Display Tabs ────────────────────────────────────────────────────────────
