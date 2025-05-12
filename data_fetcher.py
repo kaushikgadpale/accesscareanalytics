@@ -141,6 +141,19 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 
             for appt in result.value:
                 try:
+                    # Debug logging for date/time structure
+                    st.write(f"Debug - Business: {business_name}")
+                    st.write(f"Debug - Start DateTime Type: {type(appt.start_date_time)}")
+                    st.write(f"Debug - Start DateTime Value: {appt.start_date_time}")
+                    if hasattr(appt.start_date_time, '__dict__'):
+                        st.write(f"Debug - Start DateTime Attributes: {dir(appt.start_date_time)}")
+                    
+                    if appt.end_date_time:
+                        st.write(f"Debug - End DateTime Type: {type(appt.end_date_time)}")
+                        st.write(f"Debug - End DateTime Value: {appt.end_date_time}")
+                        if hasattr(appt.end_date_time, '__dict__'):
+                            st.write(f"Debug - End DateTime Attributes: {dir(appt.end_date_time)}")
+                    
                     start_dt = datetime.fromisoformat(appt.start_date_time.dateTime.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     end_dt = None
                     if appt.end_date_time:
