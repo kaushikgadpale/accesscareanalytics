@@ -137,8 +137,10 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
             )
             
             if not result:
+                st.write(f"No appointments found for {business_name}")
                 continue
                 
+            st.write(f"Processing {len(result.value)} appointments for {business_name}")
             for appt in result.value:
                 try:
                     # Debug logging for date/time structure
@@ -201,7 +203,7 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                     created_dt = datetime.fromisoformat(appt.created_date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ) if appt.created_date_time else None
                     last_updated_dt = datetime.fromisoformat(appt.last_updated_date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ) if appt.last_updated_date_time else None
                     
-                    appointments.append({
+                    appointment_data = {
                         "Business": business_name,
                         "Customer": appt.customer_name or '',
                         "Email": customer_info["email"],
@@ -239,12 +241,15 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         "Opt Out of Email": getattr(appt, 'opt_out_of_customer_email', False),
                         "Pre Buffer (min)": parse_iso_duration(getattr(appt, 'pre_buffer', '')),
                         "Post Buffer (min)": parse_iso_duration(getattr(appt, 'post_buffer', ''))
-                    })
+                    }
+                    appointments.append(appointment_data)
+                    st.write(f"Successfully processed appointment for {appointment_data['Customer']} at {appointment_data['Start Date']}")
                 except (KeyError, ValueError) as e:
                     st.warning(f"Skipping malformed appointment: {str(e)}")
                     continue
                 
             progress_bar.progress((idx + 1) / len(businesses))
+            st.write(f"Completed processing {business_name}")
         except Exception as e:
             st.error(f"Error fetching appointments for {business_name}: {str(e)}")
     
