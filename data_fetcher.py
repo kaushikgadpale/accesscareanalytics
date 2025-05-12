@@ -154,10 +154,10 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         if hasattr(appt.end_date_time, '__dict__'):
                             st.write(f"Debug - End DateTime Attributes: {dir(appt.end_date_time)}")
                     
-                    start_dt = datetime.fromisoformat(appt.start_date_time.dateTime.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                    start_dt = datetime.fromisoformat(appt.start_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     end_dt = None
                     if appt.end_date_time:
-                        end_dt = datetime.fromisoformat(appt.end_date_time.dateTime.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                        end_dt = datetime.fromisoformat(appt.end_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                     
                     # Get customer information
                     customer_info = {
@@ -181,7 +181,7 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                     cancellation_info = None
                     if appt.cancellation_date_time:
                         cancellation_info = {
-                            "datetime": datetime.fromisoformat(appt.cancellation_date_time.dateTime.replace('Z', '+00:00')).astimezone(LOCAL_TZ),
+                            "datetime": datetime.fromisoformat(appt.cancellation_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ),
                             "reason": appt.cancellation_reason or '',
                             "reason_text": getattr(appt, 'cancellation_reason_text', ''),
                             "notification_sent": getattr(appt, 'cancellation_notification_sent', False)
