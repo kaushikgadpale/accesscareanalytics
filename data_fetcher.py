@@ -143,8 +143,15 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
             st.write(f"Processing {len(result.value)} appointments for {business_name}")
             for appt in result.value:
                 try:
+                    # Debug logging for entire appointment object
+                    st.write(f"\nDebug - Full Appointment Object for {business_name}:")
+                    st.write(f"Appointment Type: {type(appt)}")
+                    st.write(f"Appointment ID: {getattr(appt, 'id', 'N/A')}")
+                    st.write(f"All Appointment Attributes: {dir(appt)}")
+                    st.write(f"Appointment Dict: {appt.__dict__}")
+                    
                     # Debug logging for date/time structure
-                    st.write(f"Debug - Business: {business_name}")
+                    st.write(f"\nDebug - Business: {business_name}")
                     st.write(f"Debug - Start DateTime Type: {type(appt.start_date_time)}")
                     st.write(f"Debug - Start DateTime Value: {appt.start_date_time}")
                     if hasattr(appt.start_date_time, '__dict__'):
@@ -181,10 +188,10 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                     
                     # Get cancellation details
                     cancellation_info = None
-                    if appt.cancellation_date_time:
+                    if hasattr(appt, 'cancellation_date_time') and appt.cancellation_date_time:
                         cancellation_info = {
                             "datetime": datetime.fromisoformat(appt.cancellation_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ),
-                            "reason": appt.cancellation_reason or '',
+                            "reason": getattr(appt, 'cancellation_reason', ''),
                             "reason_text": getattr(appt, 'cancellation_reason_text', ''),
                             "notification_sent": getattr(appt, 'cancellation_notification_sent', False)
                         }
