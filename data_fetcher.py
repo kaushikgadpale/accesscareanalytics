@@ -173,9 +173,9 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                     if appt.customers and len(appt.customers) > 0:
                         customer = appt.customers[0]
                         customer_info.update({
-                            "phone": customer.phone or '',
-                            "location": customer.customer_location,
-                            "timezone": customer.customer_time_zone or '',
+                            "phone": getattr(customer, 'phone', ''),
+                            "location": getattr(customer, 'location', None),
+                            "timezone": getattr(customer, 'time_zone', ''),
                             "notes": appt.customer_notes or ''
                         })
                     
