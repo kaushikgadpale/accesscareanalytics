@@ -147,10 +147,29 @@ def prepare_outlook_contacts(df):
     if df.empty:
         return pd.DataFrame()
     
+    # Check which columns are available in the dataframe
+    required_cols = ["Customer", "Email", "Phone"]
+    optional_cols = ["ID", "Business", "Service Location", "Customer Location", 
+                     "Customer Timezone", "Is Online", "Join URL", "Staff Members"]
+    
+    # Ensure all required columns exist
+    for col in required_cols:
+        if col not in df.columns:
+            return pd.DataFrame()  # Return empty dataframe if missing required columns
+    
+    # Create a list of columns to extract, only including those that exist
+    extract_cols = required_cols.copy()
+    for col in optional_cols:
+        if col in df.columns:
+            extract_cols.append(col)
+    
     # Get unique contacts with formatted phones
-    contacts = df[["Customer", "Email", "Phone", "ID", "Business", 
-                   "Service Location", "Customer Location", "Customer Timezone",
-                   "Is Online", "Join URL", "Staff Members"]].drop_duplicates()
+    contacts = df[extract_cols].drop_duplicates()
+    
+    # Add a unique index if ID is not available
+    if "ID" not in contacts.columns:
+        contacts["ID"] = contacts.index.astype(str)
+    
     formatted_phones = pd.DataFrame([
         format_phone_strict(phone) for phone in contacts["Phone"]
     ], columns=["Formatted Phone", "Phone Status"])
@@ -174,9 +193,18 @@ def prepare_outlook_contacts(df):
     for idx, row in contacts.iterrows():
         contact_id = row['ID']
         
-        # Find the original appointment with this ID
-        if contact_id in df['ID'].values:
-            appt = df[df['ID'] == contact_id].iloc[0]
+        # Find the original appointment with this ID (using index if ID is not from original data)
+        matched_rows = None
+        if "ID" in df.columns:
+            matched_rows = df[df['ID'] == contact_id]
+        else:
+            # If ID is not from original data, try to match using other fields
+            matched_rows = df[(df['Customer'] == row['Customer']) & 
+                            (df['Email'] == row['Email']) & 
+                            (df['Phone'] == row['Phone'])]
+        
+        if not matched_rows.empty:
+            appt = matched_rows.iloc[0]
             notes = []
             
             # Collect all form answers
@@ -192,6 +220,33 @@ def prepare_outlook_contacts(df):
     
     # Add notes to contacts dataframe
     contacts['Notes'] = contacts['ID'].map(lambda x: contact_notes.get(x, ""))
+    
+    # Default values for optional fields
+    company = ""
+    department = ""
+    office_location = ""
+    business_country = ""
+    manager_name = ""
+    
+    # Set values for optional fields if they exist
+    if "Business" in contacts.columns:
+        company = contacts["Business"]
+    if "Service Location" in contacts.columns:
+        department = contacts["Service Location"]
+    if "Customer Location" in contacts.columns:
+        office_location = contacts["Customer Location"]
+    if "Customer Timezone" in contacts.columns:
+        business_country = contacts["Customer Timezone"]
+    if "Staff Members" in contacts.columns:
+        manager_name = contacts["Staff Members"]
+    
+    # Calculate web page field
+    web_page = ""
+    if "Is Online" in contacts.columns and "Join URL" in contacts.columns:
+        web_page = contacts.apply(
+            lambda x: x["Join URL"] if x["Is Online"] else "", 
+            axis=1
+        )
     
     # Map to Outlook contact fields - keeping only the standard Outlook fields
     outlook_contacts = pd.DataFrame({
@@ -225,10 +280,10 @@ def prepare_outlook_contacts(df):
         "TTY/TDD Phone": "",
         "IMAddress": "",
         "Job Title": "",  # Leaving job title blank as requested
-        "Department": contacts["Service Location"],  # Service location as Department
-        "Company": contacts["Business"],  # Business name as Company (patient's booking site)
-        "Office Location": contacts["Customer Location"],  # Customer location as Office
-        "Manager's Name": contacts["Staff Members"],  # Staff members as Manager
+        "Department": department,  # Service location as Department
+        "Company": company,  # Business name as Company (patient's booking site)
+        "Office Location": office_location,  # Customer location as Office
+        "Manager's Name": manager_name,  # Staff members as Manager
         "Assistant's Name": "",
         "Assistant's Phone": "",
         "Company Yomi": "",
@@ -236,7 +291,7 @@ def prepare_outlook_contacts(df):
         "Business City": "",
         "Business State": "",
         "Business Postal Code": "",
-        "Business Country/Region": contacts["Customer Timezone"],  # Customer timezone as Country/Region
+        "Business Country/Region": business_country,  # Customer timezone as Country/Region
         "Home Street": "",
         "Home City": "",
         "Home State": "",
@@ -252,7 +307,7 @@ def prepare_outlook_contacts(df):
         "Schools": "",
         "Hobby": "",
         "Location": "",
-        "Web Page": contacts.apply(lambda x: x["Join URL"] if x["Is Online"] else "", axis=1),  # Meeting URL as Web Page
+        "Web Page": web_page,  # Meeting URL as Web Page
         "Birthday": "",
         "Anniversary": "",
         "Notes": contacts["Notes"]
