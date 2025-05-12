@@ -88,18 +88,18 @@ async def fetch_business_details(business_id):
             return None
             
         return {
-            "id": result.id,
-            "name": result.display_name,
-            "business_type": result.business_type,
-            "default_currency_iso": result.default_currency_iso,
-            "email": result.email,
-            "phone": result.phone,
-            "website_url": result.website_url,
+            "id": getattr(result, 'id', ''),
+            "name": getattr(result, 'display_name', ''),
+            "business_type": getattr(result, 'business_type', ''),
+            "default_currency_iso": getattr(result, 'default_currency_iso', ''),
+            "email": getattr(result, 'email', ''),
+            "phone": getattr(result, 'phone', ''),
+            "website_url": getattr(result, 'website_url', ''),
             "scheduling_policy": {
-                "allow_staff_selection": result.scheduling_policy.allow_staff_selection if hasattr(result, 'scheduling_policy') else False,
-                "time_slot_interval": result.scheduling_policy.time_slot_interval if hasattr(result, 'scheduling_policy') else 30,
-                "minimum_lead_time": result.scheduling_policy.minimum_lead_time if hasattr(result, 'scheduling_policy') else 0,
-                "maximum_advance": result.scheduling_policy.maximum_advance if hasattr(result, 'scheduling_policy') else 30
+                "allow_staff_selection": result.scheduling_policy.allow_staff_selection if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'allow_staff_selection') else False,
+                "time_slot_interval": result.scheduling_policy.time_slot_interval if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'time_slot_interval') else 30,
+                "minimum_lead_time": result.scheduling_policy.minimum_lead_time if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'minimum_lead_time') else 0,
+                "maximum_advance": result.scheduling_policy.maximum_advance if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'maximum_advance') else 30
             },
             "business_hours": result.business_hours if hasattr(result, 'business_hours') else [],
             "services": result.services if hasattr(result, 'services') else [],
@@ -176,9 +176,17 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 st.write(f"No appointments found for {business_name}")
                 continue
                 
-            st.write(f"Processing {len(result.value)} appointments for {business_name}")
-            for appt in result.value:
+            appointment_count = len(result.value)
+            st.write(f"Processing {appointment_count} appointments for {business_name}")
+            
+            # Create a progress bar for this business's appointments
+            appt_progress = st.progress(0)
+            
+            for appt_idx, appt in enumerate(result.value):
                 try:
+                    # Update progress for this business's appointments
+                    appt_progress.progress((appt_idx + 1) / appointment_count)
+                    
                     # Get customer information
                     customer_info = {
                         "phone": getattr(appt, 'customer_phone', ''),
@@ -301,11 +309,12 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         appointment_data[f"Form: {question}"] = answer
                     
                     appointments.append(appointment_data)
-                    st.write(f"Successfully processed appointment for {appointment_data['Customer']} at {appointment_data['Start Date']}")
                 except (KeyError, ValueError) as e:
                     st.warning(f"Skipping malformed appointment: {str(e)}")
                     continue
-                
+            
+            # Clear the appointment progress bar
+            appt_progress.empty()        
             progress_bar.progress((idx + 1) / len(businesses))
             st.write(f"Completed processing {business_name}")
         except Exception as e:

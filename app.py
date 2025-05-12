@@ -191,9 +191,12 @@ if fetch_button:
                 df['Hour of Day'] = df['Created Date'].dt.hour
                 df['Day of Week'] = df['Created Date'].dt.day_name()
                 
-                # Store in session state
+                # Store in session state (both new and old variables for compatibility)
                 st.session_state['appointments_df'] = df
+                st.session_state['appointment_data'] = df.set_index("ID") if "ID" in df.columns else df
                 st.session_state['last_fetch'] = datetime.now()
+                st.session_state['fetch_complete'] = True
+                st.session_state['last_updated'] = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                 
                 # Display success message
                 st.success(f"Successfully fetched {len(df)} appointments")
@@ -297,7 +300,10 @@ if fetch_button:
 
 
 # ─── Display Tabs ────────────────────────────────────────────────────────────
-if st.session_state.fetch_complete and not st.session_state.appointment_data.empty:
+if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+    st.markdown("---")
+    st.subheader("📋 Detailed Analysis")
+    
     df = st.session_state.appointment_data.copy()
 
     tabs = st.tabs([
