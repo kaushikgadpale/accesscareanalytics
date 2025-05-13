@@ -106,8 +106,26 @@ async def fetch_business_details(business_id):
             "staff_members": result.staff_members if hasattr(result, 'staff_members') else []
         }
     except Exception as e:
-        st.error(f"Failed to fetch business details: {str(e)}")
-        return None
+        # Create a default minimal business details object instead of failing completely
+        st.warning(f"Error fetching business details (ID: {business_id}): {str(e)}")
+        return {
+            "id": business_id,
+            "name": "",
+            "business_type": "",
+            "default_currency_iso": "",
+            "email": "",
+            "phone": "",
+            "website_url": "",
+            "scheduling_policy": {
+                "allow_staff_selection": False,
+                "time_slot_interval": 30,
+                "minimum_lead_time": 0,
+                "maximum_advance": 30
+            },
+            "business_hours": [],
+            "services": [],
+            "staff_members": []
+        }
 
 async def fetch_appointments(businesses, start_date, end_date, max_results):
     """Fetch appointments using Microsoft Graph SDK"""
@@ -225,28 +243,78 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         }
                     
                     # Get appointment metadata
-                    start_dt = datetime.fromisoformat(appt.start_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                    start_dt = None
+                    if hasattr(appt, 'start_date_time') and appt.start_date_time:
+                        try:
+                            date_time_str = getattr(appt.start_date_time, 'date_time', '')
+                            if date_time_str:
+                                start_dt = datetime.fromisoformat(date_time_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                        except Exception as e:
+                            st.warning(f"Error parsing start date time: {str(e)}")
+                            # Use a fallback date if possible
+                            if hasattr(appt, 'created_date_time') and appt.created_date_time:
+                                start_dt = appt.created_date_time.astimezone(LOCAL_TZ)
+                            else:
+                                start_dt = datetime.now(LOCAL_TZ)
+                    else:
+                        # Default to current time if no start time found
+                        start_dt = datetime.now(LOCAL_TZ)
+                    
                     end_dt = None
-                    if appt.end_date_time:
-                        end_dt = datetime.fromisoformat(appt.end_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                    if hasattr(appt, 'end_date_time') and appt.end_date_time:
+                        try:
+                            date_time_str = getattr(appt.end_date_time, 'date_time', '')
+                            if date_time_str:
+                                end_dt = datetime.fromisoformat(date_time_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                        except Exception as e:
+                            st.warning(f"Error parsing end date time: {str(e)}")
+                            # Calculate an estimated end time (add 30 minutes to start)
+                            if start_dt:
+                                end_dt = start_dt + timedelta(minutes=30)
+                    elif start_dt:
+                        # Default to start + 30 minutes if no end time found
+                        end_dt = start_dt + timedelta(minutes=30)
                     
                     created_dt = None
                     if hasattr(appt, 'created_date_time'):
-                        created_dt = appt.created_date_time.astimezone(LOCAL_TZ)
+                        try:
+                            created_dt = appt.created_date_time.astimezone(LOCAL_TZ)
+                        except Exception as e:
+                            st.warning(f"Error parsing created date time: {str(e)}")
+                            created_dt = datetime.now(LOCAL_TZ)
                     
                     last_updated_dt = None
                     if hasattr(appt, 'last_updated_date_time'):
-                        last_updated_dt = appt.last_updated_date_time.astimezone(LOCAL_TZ)
+                        try:
+                            last_updated_dt = appt.last_updated_date_time.astimezone(LOCAL_TZ)
+                        except Exception as e:
+                            st.warning(f"Error parsing last updated date time: {str(e)}")
+                            # Use created date as fallback for last updated
+                            last_updated_dt = created_dt if created_dt else datetime.now(LOCAL_TZ)
                     
                     # Get cancellation details
                     cancellation_info = None
                     if hasattr(appt, 'cancellation_date_time') and appt.cancellation_date_time:
-                        cancellation_info = {
-                            "datetime": datetime.fromisoformat(appt.cancellation_date_time.date_time.replace('Z', '+00:00')).astimezone(LOCAL_TZ),
-                            "reason": getattr(appt, 'cancellation_reason', ''),
-                            "reason_text": getattr(appt, 'cancellation_reason_text', ''),
-                            "notification_sent": getattr(appt, 'cancellation_notification_sent', False)
-                        }
+                        try:
+                            date_time_str = getattr(appt.cancellation_date_time, 'date_time', '')
+                            if date_time_str:
+                                cancellation_datetime = datetime.fromisoformat(date_time_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                                cancellation_info = {
+                                    "datetime": cancellation_datetime,
+                                    "reason": getattr(appt, 'cancellation_reason', ''),
+                                    "reason_text": getattr(appt, 'cancellation_reason_text', ''),
+                                    "notification_sent": getattr(appt, 'cancellation_notification_sent', False)
+                                }
+                        except Exception as e:
+                            st.warning(f"Error parsing cancellation date time: {str(e)}")
+                            # Use a default cancellation info if status shows cancelled
+                            if getattr(appt, 'status', '').lower() == 'cancelled':
+                                cancellation_info = {
+                                    "datetime": last_updated_dt or datetime.now(LOCAL_TZ),
+                                    "reason": "Unknown",
+                                    "reason_text": "",
+                                    "notification_sent": False
+                                }
                     
                     # Calculate duration in minutes
                     duration_minutes = 0

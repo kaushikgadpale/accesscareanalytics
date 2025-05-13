@@ -11,6 +11,9 @@ A comprehensive analytics dashboard for Microsoft Bookings data, providing insig
 - 🧩 Service Mix Analysis
 - 🚨 Cancellation Insights
 - 📇 Contact Export (Outlook Format)
+- 📊 Year over Year Comparison (2024 vs 2025)
+- 📅 Calendar Integration
+- 📝 Microsoft Forms Integration
 - 📊 Real-time Updates via Webhooks
 
 ## Prerequisites
@@ -24,6 +27,8 @@ A comprehensive analytics dashboard for Microsoft Bookings data, providing insig
 - Bookings.Read.All
 - BookingsAppointment.Read.All
 - BookingsAppointment.ReadWrite.All (if using webhooks)
+- Calendars.Read (for calendar integration)
+- Forms.Read.All (for MS Forms integration)
 
 ## Installation
 

@@ -28,6 +28,10 @@ from visualizations import (
     create_client_analysis_charts,
     display_cancellation_insights
 )
+from ms_integrations import (
+    render_calendar_tab,
+    render_forms_tab
+)
 
 # ─── Helper Functions ──────────────────────────────────────────────────────────
 def filter_appointments(df: pd.DataFrame) -> pd.DataFrame:
@@ -313,7 +317,10 @@ if st.session_state.get('fetch_complete', False) and not st.session_state.get('a
         "📞 Phone Validation",
         "🧩 Service Mix",
         "🚨 Cancellations",
-        "📇 Contact Export"
+        "📇 Contact Export",
+        "📊 YoY Comparison",
+        "📅 Calendar",
+        "📝 MS Forms"
     ])
 
     # — Appointments —
@@ -465,6 +472,152 @@ if st.session_state.get('fetch_complete', False) and not st.session_state.get('a
             st.write("### Country Distribution")
             if phone_tree:
                 st.plotly_chart(phone_tree, use_container_width=True, key="export_phone_tree")
+                
+    # — Year over Year Comparison —
+    with tabs[7]:
+        st.header("Year over Year Comparison: 2024 vs 2025")
+        
+        # Make sure the dataframe has a datetime column
+        if 'Start Date' in df.columns:
+            df['Year'] = df['Start Date'].dt.year
+            df['Month'] = df['Start Date'].dt.month
+            df['Month Name'] = df['Start Date'].dt.strftime('%B')
+            
+            # Filter for 2024 and 2025 data
+            comparison_df = df[df['Year'].isin([2024, 2025])]
+            
+            if not comparison_df.empty:
+                # Create monthly comparison data
+                monthly_comparison = comparison_df.groupby(['Year', 'Month', 'Month Name']).size().reset_index(name='Appointments')
+                monthly_comparison = monthly_comparison.sort_values(['Year', 'Month'])
+                
+                # Create status breakdown by month and year
+                status_comparison = comparison_df.groupby(['Year', 'Month', 'Month Name', 'Status']).size().reset_index(name='Count')
+                status_comparison = status_comparison.sort_values(['Year', 'Month'])
+                
+                # Display metrics for both years
+                col1, col2 = st.columns(2)
+                with col1:
+                    total_2024 = len(comparison_df[comparison_df['Year'] == 2024])
+                    total_2025 = len(comparison_df[comparison_df['Year'] == 2025])
+                    
+                    # Calculate growth
+                    if total_2024 > 0:
+                        growth = ((total_2025 - total_2024) / total_2024) * 100
+                        growth_label = f"{growth:.1f}%"
+                    else:
+                        growth_label = "N/A"
+                    
+                    st.subheader("Total Appointments")
+                    st.metric("2024", total_2024)
+                    st.metric("2025", total_2025, delta=growth_label)
+                
+                with col2:
+                    # Calculate completed appointment rates
+                    completed_2024 = comparison_df[(comparison_df['Year'] == 2024) & (comparison_df['Status'] == 'Completed')].shape[0]
+                    completed_2025 = comparison_df[(comparison_df['Year'] == 2025) & (comparison_df['Status'] == 'Completed')].shape[0]
+                    
+                    if total_2024 > 0:
+                        rate_2024 = (completed_2024 / total_2024) * 100
+                    else:
+                        rate_2024 = 0
+                        
+                    if total_2025 > 0:
+                        rate_2025 = (completed_2025 / total_2025) * 100
+                    else:
+                        rate_2025 = 0
+                    
+                    st.subheader("Completion Rate")
+                    st.metric("2024", f"{rate_2024:.1f}%")
+                    st.metric("2025", f"{rate_2025:.1f}%", delta=f"{rate_2025 - rate_2024:.1f}%")
+                
+                # Monthly trend charts
+                st.subheader("Monthly Appointment Trends")
+                
+                # Bar chart comparison
+                monthly_fig = px.bar(
+                    monthly_comparison,
+                    x='Month Name',
+                    y='Appointments',
+                    color='Year',
+                    barmode='group',
+                    title='Monthly Appointments: 2024 vs 2025',
+                    labels={'Appointments': 'Number of Appointments', 'Month Name': 'Month'},
+                    color_discrete_map={2024: '#1f77b4', 2025: '#ff7f0e'}
+                )
+                
+                # Customize x-axis order (January to December)
+                month_order = ['January', 'February', 'March', 'April', 'May', 'June', 
+                              'July', 'August', 'September', 'October', 'November', 'December']
+                monthly_fig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': month_order})
+                
+                st.plotly_chart(monthly_fig, use_container_width=True)
+                
+                # Status breakdown
+                st.subheader("Appointment Status by Month")
+                
+                # Let user select to view 2024 or 2025 data
+                year_to_view = st.radio("Select Year to View", [2024, 2025], horizontal=True)
+                
+                # Filter data for selected year
+                year_status_data = status_comparison[status_comparison['Year'] == year_to_view]
+                
+                if not year_status_data.empty:
+                    # Create stacked bar chart for status breakdown
+                    status_fig = px.bar(
+                        year_status_data,
+                        x='Month Name',
+                        y='Count',
+                        color='Status',
+                        title=f'Appointment Status Breakdown by Month ({year_to_view})',
+                        labels={'Count': 'Number of Appointments', 'Month Name': 'Month'},
+                        color_discrete_map={
+                            'Scheduled': '#2ca02c',
+                            'Completed': '#1f77b4',
+                            'Cancelled': '#d62728'
+                        }
+                    )
+                    
+                    # Customize x-axis order (January to December)
+                    status_fig.update_layout(xaxis={'categoryorder': 'array', 'categoryarray': month_order})
+                    
+                    st.plotly_chart(status_fig, use_container_width=True)
+                    
+                    # Show data table
+                    st.subheader(f"Monthly Data ({year_to_view})")
+                    
+                    # Pivot the data for better display
+                    pivot_df = year_status_data.pivot_table(
+                        index=['Month Name'], 
+                        columns='Status', 
+                        values='Count', 
+                        aggfunc='sum'
+                    ).reset_index()
+                    
+                    # Add a Total column
+                    pivot_df['Total'] = pivot_df.sum(axis=1, numeric_only=True)
+                    
+                    # Sort by month
+                    month_mapping = {month: i for i, month in enumerate(month_order)}
+                    pivot_df['month_idx'] = pivot_df['Month Name'].map(month_mapping)
+                    pivot_df = pivot_df.sort_values('month_idx').drop('month_idx', axis=1)
+                    
+                    # Display the table
+                    st.dataframe(pivot_df, use_container_width=True)
+                else:
+                    st.warning(f"No appointment data available for {year_to_view}")
+            else:
+                st.warning("No data available for 2024-2025 comparison. Please ensure your date range includes data from both years.")
+        else:
+            st.error("Required date columns are missing in the appointment data.")
+
+    # — Calendar —
+    with tabs[8]:
+        render_calendar_tab(df)
+
+    # — MS Forms —
+    with tabs[9]:
+        render_forms_tab()
 
 else:
     st.info("Select filters and click 'Fetch Data' to begin analysis")
