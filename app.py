@@ -435,7 +435,7 @@ def render_dashboard_tab(active_subtab):
                     # Create search for customer name
                     with filter_cols[3]:
                         if 'Customer' in df.columns:
-                            customer_search = st.text_input("Search Customer")
+                            customer_search = st.text_input("Search Customer", key="data_table_customer_search")
                         else:
                             customer_search = ""
                 
@@ -563,7 +563,7 @@ def render_dashboard_tab(active_subtab):
                         # Search for customer
                         with filter_cols[2]:
                             if 'Customer' in st.session_state.cancelled_df.columns:
-                                customer_search = st.text_input("Search Customer")
+                                customer_search = st.text_input("Search Customer", key="cancellations_customer_search")
                             else:
                                 customer_search = ""
                     
@@ -1381,9 +1381,9 @@ def render_tools_tab(active_subtab):
             st.subheader("Microsoft Graph API Configuration")
             
             # Mock configuration settings
-            st.text_input("Client ID", value="12345abcde67890fghij", type="password")
-            st.text_input("Client Secret", value="************", type="password")
-            st.text_input("Tenant ID", value="your-tenant.onmicrosoft.com")
+            st.text_input("Client ID", value="12345abcde67890fghij", type="password", key="graph_client_id")
+            st.text_input("Client Secret", value="************", type="password", key="graph_client_secret")
+            st.text_input("Tenant ID", value="your-tenant.onmicrosoft.com", key="graph_tenant_id")
             
             # API endpoints
             api_methods = ["GET /me", "GET /me/calendar/events", "GET /me/contacts", "POST /me/sendMail"]
@@ -1391,8 +1391,8 @@ def render_tools_tab(active_subtab):
             
             # Additional parameters
             if selected_method == "GET /me/calendar/events":
-                st.text_input("Start DateTime", value="2023-01-01T00:00:00Z")
-                st.text_input("End DateTime", value="2023-12-31T23:59:59Z")
+                st.text_input("Start DateTime", value="2023-01-01T00:00:00Z", key="graph_start_datetime")
+                st.text_input("End DateTime", value="2023-12-31T23:59:59Z", key="graph_end_datetime")
                 
             # Test button
             if st.button("Test API Connection"):
@@ -1434,8 +1434,8 @@ def render_tools_tab(active_subtab):
             st.subheader("Airtable API Configuration")
             
             # Mock configuration settings
-            st.text_input("API Key", value="key************", type="password")
-            st.text_input("Base ID", value="app***************")
+            st.text_input("API Key", value="key************", type="password", key="airtable_api_key")
+            st.text_input("Base ID", value="app***************", key="airtable_base_id")
             
             # Table selection
             tables = ["Patients", "Appointments", "Services", "Invoices"]
@@ -1757,7 +1757,7 @@ def render_integrations_tab(active_subtab):
         """, unsafe_allow_html=True)
         
         # Add webhook configuration UI
-        st.text_input("Webhook URL", placeholder="https://your-service.com/webhook")
+        st.text_input("Webhook URL", placeholder="https://your-service.com/webhook", key="webhook_url")
         
         # Create columns for event selection
         st.subheader("Select Events to Trigger Webhook")
