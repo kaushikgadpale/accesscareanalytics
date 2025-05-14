@@ -15,6 +15,21 @@ async def get_graph_client():
     from data_fetcher import get_graph_client as fetch_graph_client
     return await fetch_graph_client()
 
+async def inspect_calendar_api():
+    """Inspect the Microsoft Graph calendar API to determine parameter names"""
+    try:
+        graph_client = await get_graph_client()
+        if not graph_client:
+            return None, "Failed to initialize Graph client"
+        
+        # Get the events endpoint to check methods and parameters
+        events_endpoint = graph_client.users.by_user_id("me").calendar.events
+        
+        # Return the events endpoint for inspection
+        return events_endpoint, None
+    except Exception as e:
+        return None, f"Error inspecting calendar API: {str(e)}"
+
 async def fetch_calendar_events(start_date, end_date, max_results=500, user_id="me"):
     """Fetch calendar events for a user in the specified date range"""
     try:
@@ -31,71 +46,132 @@ async def fetch_calendar_events(start_date, end_date, max_results=500, user_id="
         start_str = start_datetime.isoformat().replace('+00:00', 'Z')
         end_str = end_datetime.isoformat().replace('+00:00', 'Z')
         
-        # Set up query parameters
-        query_params = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters(
-            start_date_time=start_str,
-            end_date_time=end_str,
-            top=max_results,
-            select=["subject", "start", "end", "attendees", "organizer", "location", "body", "categories", "importance"]
-        )
+        # First try to use the API directly without query parameters
+        try:
+            # Try to get events directly with filtering in the URL
+            events_url = f"/me/calendar/events?startDateTime={start_str}&endDateTime={end_str}&$top={max_results}"
+            result = await graph_client.request(method="GET", url=events_url)
+            
+            if result and hasattr(result, "value") and result.value:
+                # Return events from direct request
+                return process_calendar_events(result.value)
+        except Exception as direct_err:
+            st.warning(f"Direct API request failed, trying with query parameters: {str(direct_err)}")
         
-        request_configuration = RequestConfiguration(
-            query_parameters=query_params
-        )
+        # If direct request failed, try with request builder and different parameter naming conventions
+        parameter_combinations = [
+            # Try with standard parameter naming
+            {"startDateTime": start_str, "endDateTime": end_str},
+            # Try with snake_case parameter naming
+            {"start_date_time": start_str, "end_date_time": end_str},
+            # Try with simple parameter naming
+            {"start": start_str, "end": end_str}
+        ]
         
-        # Get events
-        result = await graph_client.users.by_user_id(user_id).calendar.events.get(
-            request_configuration=request_configuration
-        )
-        
-        if not result or not result.value:
-            st.warning("No calendar events found in the specified date range")
-            return []
-        
-        events = []
-        for event in result.value:
+        for params in parameter_combinations:
             try:
-                # Process each event
-                event_data = {
-                    "Subject": getattr(event, "subject", ""),
-                    "Start Time": datetime.fromisoformat(getattr(event.start, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "start") and hasattr(event.start, "date_time") else None,
-                    "End Time": datetime.fromisoformat(getattr(event.end, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "end") and hasattr(event.end, "date_time") else None,
-                    "Organizer": getattr(event.organizer.email_address, "name", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
-                    "Organizer Email": getattr(event.organizer.email_address, "address", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
-                    "Location": getattr(event.location, "display_name", "") if hasattr(event, "location") else "",
-                    "Is Online Meeting": getattr(event, "is_online_meeting", False),
-                    "Online Meeting URL": getattr(event, "online_meeting_url", ""),
-                    "ID": getattr(event, "id", ""),
-                    "Created": getattr(event, "created_date_time", None),
-                    "Last Modified": getattr(event, "last_modified_date_time", None),
-                    "Categories": ", ".join(event.categories) if hasattr(event, "categories") and event.categories else "",
-                    "Importance": getattr(event, "importance", "")
+                # Construct query parameters
+                query_params_dict = {
+                    **params,
+                    "top": max_results,
+                    "select": ["subject", "start", "end", "attendees", "organizer", "location", "body", "categories", "importance"]
                 }
                 
-                # Get attendees
-                attendees = []
-                if hasattr(event, "attendees") and event.attendees:
-                    for attendee in event.attendees:
-                        if hasattr(attendee, "email_address") and hasattr(attendee.email_address, "address"):
-                            attendees.append(getattr(attendee.email_address, "address", ""))
+                # Log parameters being tried
+                st.info(f"Trying with parameters: {list(params.keys())}")
                 
-                event_data["Attendees"] = ", ".join(attendees)
+                # Create query parameters object
+                query_params = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters(**query_params_dict)
+                request_configuration = RequestConfiguration(query_parameters=query_params)
                 
-                # Extract content from body if available
-                if hasattr(event, "body") and hasattr(event.body, "content"):
-                    event_data["Body"] = event.body.content
+                # Get events
+                result = await graph_client.users.by_user_id(user_id).calendar.events.get(
+                    request_configuration=request_configuration
+                )
+                
+                if result and hasattr(result, "value") and result.value:
+                    st.success(f"Successfully fetched events with parameters: {list(params.keys())}")
+                    return process_calendar_events(result.value)
                 else:
-                    event_data["Body"] = ""
-                
-                events.append(event_data)
+                    st.warning("No events found with this parameter configuration")
             except Exception as e:
-                st.warning(f"Error processing calendar event: {str(e)}")
+                st.warning(f"Parameter combination {list(params.keys())} failed: {str(e)}")
                 continue
         
-        return events
+        # If all parameter combinations failed, try with OData filter
+        try:
+            # Create filter-based query
+            filter_query = f"start/dateTime ge '{start_str}' and end/dateTime le '{end_str}'"
+            query_params = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters(
+                filter=filter_query,
+                top=max_results,
+                select=["subject", "start", "end", "attendees", "organizer", "location", "body", "categories", "importance"]
+            )
+            
+            request_configuration = RequestConfiguration(query_parameters=query_params)
+            
+            # Get events with filter
+            result = await graph_client.users.by_user_id(user_id).calendar.events.get(
+                request_configuration=request_configuration
+            )
+            
+            if result and hasattr(result, "value") and result.value:
+                st.success("Successfully fetched events with OData filter")
+                return process_calendar_events(result.value)
+            else:
+                st.warning("No calendar events found with OData filter approach")
+                return []
+        except Exception as filter_err:
+            st.error(f"OData filter approach failed: {str(filter_err)}")
+            return []
+            
     except Exception as e:
         st.error(f"Failed to fetch calendar events: {str(e)}")
         return []
+
+def process_calendar_events(events):
+    """Process calendar events returned from the API"""
+    processed_events = []
+    for event in events:
+        try:
+            # Process each event
+            event_data = {
+                "Subject": getattr(event, "subject", ""),
+                "Start Time": datetime.fromisoformat(getattr(event.start, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "start") and hasattr(event.start, "date_time") else None,
+                "End Time": datetime.fromisoformat(getattr(event.end, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "end") and hasattr(event.end, "date_time") else None,
+                "Organizer": getattr(event.organizer.email_address, "name", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
+                "Organizer Email": getattr(event.organizer.email_address, "address", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
+                "Location": getattr(event.location, "display_name", "") if hasattr(event, "location") else "",
+                "Is Online Meeting": getattr(event, "is_online_meeting", False),
+                "Online Meeting URL": getattr(event, "online_meeting_url", ""),
+                "ID": getattr(event, "id", ""),
+                "Created": getattr(event, "created_date_time", None),
+                "Last Modified": getattr(event, "last_modified_date_time", None),
+                "Categories": ", ".join(event.categories) if hasattr(event, "categories") and event.categories else "",
+                "Importance": getattr(event, "importance", "")
+            }
+            
+            # Get attendees
+            attendees = []
+            if hasattr(event, "attendees") and event.attendees:
+                for attendee in event.attendees:
+                    if hasattr(attendee, "email_address") and hasattr(attendee.email_address, "address"):
+                        attendees.append(getattr(attendee.email_address, "address", ""))
+            
+            event_data["Attendees"] = ", ".join(attendees)
+            
+            # Extract content from body if available
+            if hasattr(event, "body") and hasattr(event.body, "content"):
+                event_data["Body"] = event.body.content
+            else:
+                event_data["Body"] = ""
+            
+            processed_events.append(event_data)
+        except Exception as e:
+            st.warning(f"Error processing calendar event: {str(e)}")
+            continue
+    
+    return processed_events
 
 async def fetch_forms_responses(form_id):
     """Fetch responses for a Microsoft Form"""
@@ -125,15 +201,25 @@ async def fetch_forms_responses(form_id):
             # Provide more detailed troubleshooting guidance
             st.markdown("""
             <div style="background-color: #ffebee; padding: 1rem; border-radius: 10px; margin-top: 1rem;">
-                <h4 style="margin-top: 0; color: #c62828;">Microsoft Forms API Limitations</h4>
-                <p>Microsoft Graph API has limited support for Forms data. Try the following:</p>
+                <h4 style="margin-top: 0; color: #c62828;">Microsoft Forms API Integration Issues</h4>
+                <p>Microsoft Graph API has limitations when accessing Forms data. Common issues include:</p>
                 <ul>
-                    <li>Verify your app has <code>Forms.Read.All</code> permission in Azure AD</li>
-                    <li>Ensure you are using the correct Form ID - check the URL of your form</li>
-                    <li>Verify you are the owner of the form or have proper permissions</li>
-                    <li>Try using the direct Forms API endpoint with the appropriate scope</li>
+                    <li><strong>Permission scope:</strong> Ensure your app has <code>Forms.Read.All</code> permission in Azure AD</li>
+                    <li><strong>Form ID format:</strong> Check if you're using the correct Form ID format - try both the long ID from the URL and the short ID</li>
+                    <li><strong>API Path:</strong> The Forms API path might have changed. Try alternative paths:
+                        <ul>
+                            <li><code>/me/forms/{form_id}</code></li>
+                            <li><code>/users/{user_id}/forms/{form_id}</code></li>
+                        </ul>
+                    </li>
+                    <li><strong>Form ownership:</strong> You must be the owner of the form or have proper admin permissions</li>
                 </ul>
-                <p>Note: If you continue to experience issues, Microsoft Forms data may need to be accessed through alternative methods such as Power Automate or the Excel export feature in Forms.</p>
+                <p><strong>Alternative solutions:</strong></p>
+                <ol>
+                    <li>Try using Microsoft Power Automate to connect Forms to your data destination</li>
+                    <li>Use the Excel export feature in Microsoft Forms and process the data manually</li>
+                    <li>Check the latest Microsoft Graph documentation for Forms API changes</li>
+                </ol>
             </div>
             """, unsafe_allow_html=True)
             return None
@@ -228,6 +314,59 @@ def render_calendar_tab(df):
         return
     
     cal_max_results = st.slider("Max Calendar Events", 50, 1000, 200, key="cal_max_events")
+    
+    # Add a section for API debugging
+    with st.expander("API Inspection & Debugging", expanded=False):
+        st.markdown("""
+        <div style="background-color: #f8f9fa; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
+            <h4 style="margin-top: 0; color: #2c3e50;">🔍 Graph API Inspection</h4>
+            <p>This section helps diagnose Microsoft Graph API integration issues.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        inspect_button = st.button("🔍 Inspect Graph API", key="inspect_api")
+        
+        if inspect_button:
+            with st.spinner("Inspecting Microsoft Graph API..."):
+                events_api, error = asyncio.run(inspect_calendar_api())
+                
+                if error:
+                    st.error(f"Failed to inspect API: {error}")
+                elif events_api:
+                    # Show available API information
+                    st.success("Successfully connected to Microsoft Graph API")
+                    
+                    # Check SDK version
+                    import msgraph_sdk
+                    st.info(f"Microsoft Graph SDK Version: {msgraph_sdk.__version__ if hasattr(msgraph_sdk, '__version__') else 'Unknown'}")
+                    
+                    st.markdown("### API Structure Information")
+                    
+                    # Try to get parameter info from EventsRequestBuilder
+                    try:
+                        param_class = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters
+                        param_init = param_class.__init__
+                        param_args = param_init.__code__.co_varnames
+                        
+                        st.write("#### Available Parameters:")
+                        st.code(", ".join(param_args))
+                    except Exception as param_err:
+                        st.warning(f"Could not inspect parameters: {str(param_err)}")
+                        
+                    # Manual API call attempt
+                    st.markdown("### Test Direct API Call")
+                    test_api_button = st.button("Test Direct API Call", key="test_api")
+                    
+                    if test_api_button:
+                        try:
+                            # Try a simple API call to get a single event
+                            result = asyncio.run(events_api.get(top=1))
+                            if result and hasattr(result, "value"):
+                                st.success(f"API call successful! Found {len(result.value)} events")
+                            else:
+                                st.warning("API call successful but no events returned")
+                        except Exception as api_err:
+                            st.error(f"API call failed: {str(api_err)}")
     
     fetch_cal_button = st.button("🔄 Fetch Calendar Data")
     
@@ -357,7 +496,12 @@ def render_calendar_tab(df):
                     
                     <h5 style="color: #c62828; margin-top: 0.8rem;">Common Issues</h5>
                     <ul>
-                        <li><strong>Parameter name errors:</strong> If you see an error about unexpected arguments like 'startDateTime', this is likely due to Microsoft Graph SDK API changes. Parameter names are now in snake_case format.</li>
+                        <li><strong>Parameter name errors:</strong> The Microsoft Graph SDK frequently updates parameter names. If you see errors about unexpected arguments, try using these parameter names:
+                            <ul>
+                                <li>For date range: <code>start</code> and <code>end</code> (or try <code>startDateTime</code> and <code>endDateTime</code>)</li>
+                                <li>For query limits: <code>top</code> (not <code>$top</code>)</li>
+                            </ul>
+                        </li>
                         <li><strong>Permission errors:</strong> Ensure your Azure AD app has the following permissions:
                             <ul>
                                 <li><code>Calendars.Read</code> - To read calendar data</li>
@@ -365,16 +509,11 @@ def render_calendar_tab(df):
                             </ul>
                         </li>
                         <li><strong>Authentication errors:</strong> Make sure your authentication credentials are valid and not expired</li>
-                        <li><strong>Date formatting issues:</strong> Ensure dates are properly formatted in ISO 8601 format</li>
+                        <li><strong>Date formatting issues:</strong> Ensure dates are properly formatted in ISO 8601 format with 'Z' suffix</li>
                     </ul>
                     
-                    <h5 style="color: #c62828; margin-top: 0.8rem;">Additional Steps</h5>
-                    <ol>
-                        <li>Check that your Microsoft 365 account has access to Outlook calendar</li>
-                        <li>Verify network connectivity to Microsoft Graph API endpoints</li>
-                        <li>Try with a smaller date range to reduce the data volume</li>
-                        <li>Check the Microsoft 365 Service Health Dashboard for any outages</li>
-                    </ol>
+                    <h5 style="color: #c62828; margin-top: 0.8rem;">Microsoft Graph SDK Version</h5>
+                    <p>Parameter names can vary between SDK versions. Check your SDK version and refer to the latest Microsoft Graph API documentation.</p>
                 </div>
                 """, unsafe_allow_html=True)
     
