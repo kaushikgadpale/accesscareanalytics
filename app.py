@@ -13,6 +13,7 @@ import numpy as np
 import time
 import uuid
 import sys
+import asyncio
 
 # Import custom modules
 from config import THEME_CONFIG, DATE_PRESETS, APP_TAGLINE, LOGO_PATH
@@ -20,6 +21,7 @@ from ms_integrations import fetch_bookings_data, fetch_calendar_events
 from phone_formatter import format_phone_strict, create_phone_analysis, format_phone_dataframe, prepare_outlook_contacts, create_appointments_flow, process_uploaded_phone_list
 from airtable_integration import render_airtable_tabs, get_airtable_credentials, fetch_airtable_table
 from icons import render_logo, render_tab_bar, render_icon, render_empty_state, render_info_box
+from sow_creator import render_sow_creator
 
 # Page configuration
 st.set_page_config(
@@ -56,26 +58,41 @@ if 'calendar_data' not in st.session_state:
 
 # Helper functions
 def set_active_tab(tab):
+    """Set the active main tab and update session state"""
     st.session_state.active_tab = tab
+    # Force the page to rerun
+    st.rerun()
     
 def set_active_subtab(tab, subtab):
+    """Set the active subtab for a specific main tab and update session state"""
     if 'active_subtab' not in st.session_state:
         st.session_state.active_subtab = {}
     st.session_state.active_subtab[tab] = subtab
+    # Force the page to rerun
+    st.rerun()
 
 # Render the application header
 def render_app_header():
     """Render the application header with logo and title"""
-    header_html = f"""
-    <div class="app-header">
-        {render_logo(width="50px")}
-        <div style="margin-left: 15px;">
-            <h1 class="app-title">Access Care Analytics Dashboard</h1>
-            <p class="app-subtitle">{APP_TAGLINE}</p>
-        </div>
-    </div>
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
+    col1, col2 = st.columns([1, 4])
+    
+    with col1:
+        # Check if logo files exist and use them, otherwise use the SVG
+        logo_path = "logo.png"
+        big_logo_path = "big logo.png"
+        
+        if os.path.exists(big_logo_path):
+            st.image(big_logo_path, width=150)
+        elif os.path.exists(logo_path):
+            st.image(logo_path, width=80)
+        else:
+            st.markdown(render_logo(width="80px"), unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown(f"""
+        <h1 class="app-title">Access Care Analytics Dashboard</h1>
+        <p class="app-subtitle">{APP_TAGLINE}</p>
+        """, unsafe_allow_html=True)
 
 # Tab definitions for the main navigation
 MAIN_TABS = {
@@ -128,13 +145,22 @@ def main():
         # Initialize active subtab for this tab if not set
         if active_tab not in st.session_state.active_subtab:
             st.session_state.active_subtab[active_tab] = list(SUBTABS[active_tab].keys())[0]
+        
+        # Add a small visual separator
+        st.markdown("<div style='height: 5px;'></div>", unsafe_allow_html=True)
             
+        # Create columns for subtabs
+        st.markdown("<div class='subtabs-container'>", unsafe_allow_html=True)
+        
         # Render the subtabs
         active_subtab = render_tab_bar(
             SUBTABS[active_tab], 
             st.session_state.active_subtab.get(active_tab),
             lambda subtab: set_active_subtab(active_tab, subtab)
         )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
         st.session_state.active_subtab[active_tab] = active_subtab
     
     # Render the content for the active tab and subtab
@@ -281,7 +307,7 @@ def render_dashboard_tab(active_subtab):
                     "Created Date": pd.date_range(start="2023-01-01", periods=15, freq="D"),
                     "Service": ["Cleaning", "Exam", "Surgery"] * 5
                 })
-                st.experimental_rerun()
+                st.rerun()
                 
     elif active_subtab == "appointments":
         st.header("Appointments")
@@ -1100,17 +1126,131 @@ def render_tools_tab(active_subtab):
 # Simple placeholder for the remaining tabs
 def render_integrations_tab(active_subtab):
     st.header("Integrations")
-    render_empty_state(
-        f"The {active_subtab} integration tab is under development.",
-        "link"
-    )
+    
+    if active_subtab == "ms_graph":
+        st.subheader("Microsoft Graph API Integration")
+        
+        # Create tabs for different Microsoft Graph services
+        graph_services = ["Calendar", "Bookings", "Contacts", "Mail"]
+        selected_service = st.selectbox("Service", graph_services)
+        
+        if selected_service == "Calendar":
+            st.markdown("""
+            <div class="card">
+                <h3>Microsoft Calendar Integration</h3>
+                <p>Fetch and analyze calendar events from your Microsoft 365 account.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Date range selection
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Start Date", value=st.session_state.date_range[0])
+            with col2:
+                end_date = st.date_input("End Date", value=st.session_state.date_range[1])
+            
+            # Fetch button
+            if st.button("Fetch Calendar Events"):
+                with st.spinner("Fetching calendar events..."):
+                    # Run the asynchronous function
+                    calendar_data = asyncio.run(fetch_calendar_events(start_date, end_date))
+                    
+                    if calendar_data and len(calendar_data) > 0:
+                        # Store in session state
+                        st.session_state.calendar_data = pd.DataFrame(calendar_data)
+                        st.success(f"Successfully fetched {len(calendar_data)} calendar events.")
+                    else:
+                        st.warning("No calendar events found for the selected date range.")
+            
+            # Display calendar data if available
+            if st.session_state.get('calendar_data') is not None:
+                st.subheader("Calendar Events")
+                st.dataframe(st.session_state.calendar_data)
+                
+                # Download option
+                csv = st.session_state.calendar_data.to_csv(index=False)
+                st.download_button(
+                    label="Download Calendar Data",
+                    data=csv,
+                    file_name=f"calendar_events_{start_date}_to_{end_date}.csv",
+                    mime="text/csv"
+                )
+        
+        elif selected_service == "Bookings":
+            st.markdown("""
+            <div class="card">
+                <h3>Microsoft Bookings Integration</h3>
+                <p>Fetch and analyze appointment data from your Microsoft Bookings account.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Date range selection
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input("Start Date", value=st.session_state.date_range[0])
+            with col2:
+                end_date = st.date_input("End Date", value=st.session_state.date_range[1])
+            
+            # Maximum results
+            max_results = st.slider("Maximum Results", min_value=10, max_value=1000, value=500, step=10)
+            
+            # Fetch button
+            if st.button("Fetch Bookings Data"):
+                with st.spinner("Fetching bookings data..."):
+                    # Run the asynchronous function
+                    bookings_data = asyncio.run(fetch_bookings_data(start_date, end_date, max_results))
+                    
+                    if bookings_data and len(bookings_data) > 0:
+                        # Store in session state
+                        st.session_state.bookings_data = pd.DataFrame(bookings_data)
+                        st.success(f"Successfully fetched {len(bookings_data)} appointments.")
+                    else:
+                        st.warning("No appointments found for the selected date range.")
+            
+            # Display bookings data if available
+            if st.session_state.get('bookings_data') is not None:
+                st.subheader("Bookings Data")
+                st.dataframe(st.session_state.bookings_data)
+                
+                # Download option
+                csv = st.session_state.bookings_data.to_csv(index=False)
+                st.download_button(
+                    label="Download Bookings Data",
+                    data=csv,
+                    file_name=f"bookings_data_{start_date}_to_{end_date}.csv",
+                    mime="text/csv"
+                )
+                
+        elif selected_service in ["Contacts", "Mail"]:
+            render_empty_state(
+                f"The {selected_service} integration is under development.",
+                "link"
+            )
+    
+    elif active_subtab in ["airtable", "webhooks"]:
+        render_empty_state(
+            f"The {active_subtab} integration tab is under development.",
+            "link"
+        )
 
 def render_content_tab(active_subtab):
+    """Render the content creator tab"""
     st.header("Content Creator")
-    render_empty_state(
-        f"The {active_subtab} content creator tab is under development.",
-        "document"
-    )
+    
+    if active_subtab == "sow":
+        # Render the SOW generator UI
+        render_sow_creator()
+    elif active_subtab == "templates":
+        # Show a message about templates being under development
+        render_empty_state(
+            "The templates feature is currently under development. Check back soon!",
+            "template"
+        )
+    else:
+        render_empty_state(
+            f"The {active_subtab} content creator tab is under development.",
+            "document"
+        )
 
 # Call the main function
 if __name__ == "__main__":

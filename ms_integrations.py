@@ -9,11 +9,43 @@ from msgraph import GraphServiceClient
 from msgraph.generated.users.item.calendar.events.events_request_builder import EventsRequestBuilder
 from kiota_abstractions.base_request_configuration import RequestConfiguration
 from auth import get_auth_headers
+from data_fetcher import fetch_appointments, fetch_businesses
 
 async def get_graph_client():
     """Initialize Microsoft Graph client using Azure authentication"""
     from data_fetcher import get_graph_client as fetch_graph_client
     return await fetch_graph_client()
+
+async def fetch_bookings_data(start_date, end_date, max_results=500):
+    """Fetch bookings data for the specified date range"""
+    try:
+        st.info("Fetching bookings data...")
+        
+        # Get all businesses without filters (this will get all available Bookings pages)
+        businesses = await fetch_businesses()
+        if not businesses:
+            st.warning("No businesses found in your Microsoft Bookings account")
+            return []
+        
+        st.info(f"Found {len(businesses)} booking pages. Fetching appointments for each page...")
+        
+        # Display the business pages we're fetching from
+        business_names = [b["name"] for b in businesses]
+        st.write("Fetching from booking pages:", ", ".join(business_names))
+        
+        # Fetch appointments for each business
+        appointments = await fetch_appointments(businesses, start_date, end_date, max_results)
+        
+        if not appointments:
+            st.warning("No appointments found for the selected date range")
+            return []
+            
+        st.success(f"Successfully fetched {len(appointments)} appointments")
+        return appointments
+        
+    except Exception as e:
+        st.error(f"Failed to fetch bookings data: {str(e)}")
+        return []
 
 async def inspect_calendar_api():
     """Inspect the Microsoft Graph calendar API to determine parameter names"""

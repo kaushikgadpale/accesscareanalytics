@@ -39,19 +39,19 @@ DATE_PRESETS = {
 
 # Theme Configuration
 THEME_CONFIG = {
-    'BACKGROUND_COLOR': '#1e1e2e',
-    'TEXT_COLOR': '#e0def4',
-    'PRIMARY_COLOR': '#9ccfd8',
-    'SECONDARY_COLOR': '#c4a7e7',
-    'ACCENT_COLOR': '#eb6f92',
-    'SUCCESS_COLOR': '#31748f',
-    'WARNING_COLOR': '#f6c177',
-    'DANGER_COLOR': '#eb6f92',
-    'LIGHT_COLOR': '#2a273f',
-    'DARK_COLOR': '#191724',
-    'SIDEBAR_BG': '#191724',
-    'CARD_BG': '#26233a',
-    'CARD_SHADOW': '0 4px 6px rgba(0,0,0,0.2)',
+    'BACKGROUND_COLOR': '#ffffff',
+    'TEXT_COLOR': '#333333',
+    'PRIMARY_COLOR': '#4b5563',
+    'SECONDARY_COLOR': '#6b7280',
+    'ACCENT_COLOR': '#8b5cf6',
+    'SUCCESS_COLOR': '#10b981',
+    'WARNING_COLOR': '#f59e0b',
+    'DANGER_COLOR': '#ef4444',
+    'LIGHT_COLOR': '#f3f4f6',
+    'DARK_COLOR': '#1f2937',
+    'SIDEBAR_BG': '#f8fafc',
+    'CARD_BG': '#ffffff',
+    'CARD_SHADOW': '0 4px 6px rgba(0,0,0,0.1)',
     'BORDER_RADIUS': '8px',
     'FONT_FAMILY': '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
 }

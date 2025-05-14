@@ -80,27 +80,29 @@ def render_tab_bar(tabs, active_tab=None, callback=None):
         is_active = active_tab == tab_id
         tab_color = THEME_CONFIG['ACCENT_COLOR'] if is_active else THEME_CONFIG['PRIMARY_COLOR']
         
-        tab_style = f"background-color: {'#2a273f' if is_active else '#26233a'}; " + \
-                   f"border-bottom: 3px solid {tab_color if is_active else 'transparent'}; " + \
-                   "padding: 10px; border-radius: 8px 8px 0 0; text-align: center; cursor: pointer;"
-        
-        # Create the tab with icon and label
-        icon_html = get_icon_html(tab_info['icon'], tab_color, "20px", "20px")
-        tab_html = f"""
-        <div style="{tab_style}">
-            {icon_html}
-            <span style="margin-left: 8px; color: {tab_color};">{tab_info['label']}</span>
-        </div>
-        """
-        
-        # Render the tab and handle click
+        # Create the tab with label and icon displayed in the button
         with cols[i]:
-            if st.markdown(tab_html, unsafe_allow_html=True):
+            # Create a unique key for the button to ensure it works properly
+            button_key = f"tab_{tab_id}_{i}"
+            
+            # Get icon HTML to put before the button (can't put HTML in button directly)
+            icon_html = get_icon_html(tab_info['icon'], tab_color, "16px", "16px")
+            st.markdown(f"<div style='text-align: center; height: 20px;'>{icon_html}</div>", unsafe_allow_html=True)
+            
+            # Create the actual button with proper label for accessibility
+            button_label = tab_info.get('label', tab_id.capitalize())
+            
+            if st.button(
+                button_label,
+                key=button_key,
+                use_container_width=True
+            ):
+                active_tab = tab_id
                 if callback:
                     callback(tab_id)
-                    
+    
     # Add a separator line
-    st.markdown(f'<div style="height: 1px; background-color: #2a273f; margin-bottom: 20px;"></div>', 
+    st.markdown(f'<div style="height: 1px; background-color: #e5e7eb; margin-bottom: 20px;"></div>', 
                 unsafe_allow_html=True)
     
     return active_tab
@@ -193,10 +195,10 @@ def render_info_box(message, box_type="info"):
 def get_logo_base64():
     """Generate a simple logo with initials ACA in SVG format and return as base64"""
     svg_logo = """<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100" height="100" rx="10" fill="#191724"/>
-        <text x="50" y="60" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#9ccfd8" text-anchor="middle">ACA</text>
-        <path d="M20 80 L80 80" stroke="#eb6f92" stroke-width="4" stroke-linecap="round"/>
-        <path d="M30 70 L70 70" stroke="#c4a7e7" stroke-width="4" stroke-linecap="round"/>
+        <rect width="100" height="100" rx="10" fill="#f8fafc"/>
+        <text x="50" y="60" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#3b82f6" text-anchor="middle">ACA</text>
+        <path d="M20 80 L80 80" stroke="#7c3aed" stroke-width="4" stroke-linecap="round"/>
+        <path d="M30 70 L70 70" stroke="#6b7280" stroke-width="4" stroke-linecap="round"/>
     </svg>"""
     
     # Base64 encode the SVG content

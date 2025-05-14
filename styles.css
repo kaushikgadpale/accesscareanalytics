@@ -2,25 +2,25 @@
 
 /* Global Styles */
 .stApp {
-    background-color: #1e1e2e;
-    color: #e0def4;
+    background-color: #ffffff;
+    color: #333333;
 }
 
 /* Main header styling */
 h1, h2, h3, h4, h5, h6 {
-    color: #9ccfd8 !important;
+    color: #3b82f6 !important;
     font-family: 'Inter', 'Segoe UI', sans-serif;
     font-weight: 600;
 }
 
 /* Card styling */
 .card {
-    background-color: #26233a;
+    background-color: #ffffff;
     border-radius: 8px;
     padding: 1.5rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     margin-bottom: 1.5rem;
-    border: 1px solid #2a273f;
+    border: 1px solid #e5e7eb;
 }
 
 /* Metric card styling */
@@ -32,18 +32,18 @@ h1, h2, h3, h4, h5, h6 {
 .metric-value {
     font-size: 2.5rem;
     font-weight: 700;
-    color: #c4a7e7;
+    color: #7c3aed;
 }
 
 .metric-label {
     font-size: 1rem;
-    color: #e0def4;
+    color: #6b7280;
     opacity: 0.8;
 }
 
 /* Custom tabs styling */
 .custom-tab {
-    background-color: #26233a;
+    background-color: #f3f4f6;
     border-radius: 8px 8px 0 0;
     padding: 0.75rem 1.25rem;
     font-weight: 500;
@@ -53,49 +53,96 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .custom-tab:hover {
-    background-color: #2a273f;
+    background-color: #e5e7eb;
 }
 
 .custom-tab.active {
-    border-bottom-color: #eb6f92;
-    background-color: #2a273f;
+    border-bottom-color: #7c3aed;
+    background-color: #e5e7eb;
 }
 
 /* Button styling */
 .stButton>button {
-    background-color: #31748f !important;
-    color: #e0def4 !important;
+    background-color: #3b82f6 !important;
+    color: white !important;
     border: none !important;
     border-radius: 6px !important;
     transition: all 0.2s ease !important;
 }
 
 .stButton>button:hover {
-    background-color: #9ccfd8 !important;
-    color: #191724 !important;
+    background-color: #2563eb !important;
+    color: white !important;
+}
+
+/* Tab Button styling - specifically target buttons used as tabs */
+[data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
+    background-color: #f3f4f6 !important;
+    color: #333333 !important;
+    border-radius: 8px 8px 0 0 !important;
+    border-bottom: 3px solid transparent !important;
+    font-weight: 500 !important;
+    margin: 0 !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+}
+
+[data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]):hover {
+    background-color: #e5e7eb !important;
+    border-bottom: 3px solid #7c3aed !important;
+}
+
+/* Style for active tab - will need JavaScript to toggle this, but adding for completeness */
+[data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"].active:has(+ div[aria-label*="Switch to"]) {
+    background-color: #e5e7eb !important;
+    border-bottom: 3px solid #7c3aed !important;
+}
+
+/* Subtabs container and styling */
+.subtabs-container {
+    margin-top: -20px; /* Reduce the gap between main tabs and subtabs */
+    margin-bottom: 20px;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 10px;
+}
+
+/* Make subtab buttons smaller and less prominent */
+.subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
+    background-color: #f8fafc !important;
+    font-size: 0.85rem !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important; /* More rounded for subtabs */
+    margin-right: 5px !important;
+    border: 1px solid #e5e7eb !important;
+    border-bottom: 2px solid transparent !important;
+}
+
+.subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]):hover {
+    background-color: #f1f5f9 !important;
+    border-bottom: 2px solid #7c3aed !important; /* Different color for subtabs */
 }
 
 /* Input field styling */
 .stTextInput>div>div>input, 
 .stNumberInput>div>div>input,
 .stDateInput>div>div>input {
-    background-color: #2a273f !important;
-    color: #e0def4 !important;
-    border: 1px solid #2a273f !important;
+    background-color: #f8fafc !important;
+    color: #333333 !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 6px !important;
 }
 
 /* Selectbox styling */
 .stSelectbox>div>div>div {
-    background-color: #2a273f !important;
-    color: #e0def4 !important;
-    border: 1px solid #2a273f !important;
+    background-color: #f8fafc !important;
+    color: #333333 !important;
+    border: 1px solid #e5e7eb !important;
     border-radius: 6px !important;
 }
 
 /* Sidebar styling */
 .css-1d391kg, .css-12oz5g7 {
-    background-color: #191724 !important;
+    background-color: #f8fafc !important;
 }
 
 /* Hide Streamlit branding */
@@ -105,24 +152,24 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Custom info boxes */
 .info-box {
-    background-color: #2a273f;
-    border-left: 4px solid #9ccfd8;
+    background-color: #f0f9ff;
+    border-left: 4px solid #3b82f6;
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 0 8px 8px 0;
 }
 
 .warning-box {
-    background-color: #2a273f;
-    border-left: 4px solid #f6c177;
+    background-color: #fffbeb;
+    border-left: 4px solid #f59e0b;
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 0 8px 8px 0;
 }
 
 .error-box {
-    background-color: #2a273f;
-    border-left: 4px solid #eb6f92;
+    background-color: #fee2e2;
+    border-left: 4px solid #ef4444;
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 0 8px 8px 0;
@@ -132,44 +179,44 @@ h1, h2, h3, h4, h5, h6 {
 .empty-state {
     text-align: center;
     padding: 3rem 1rem;
-    background-color: #26233a;
+    background-color: #f8fafc;
     border-radius: 8px;
     margin-bottom: 1.5rem;
 }
 
 .empty-state-icon {
     font-size: 3rem;
-    color: #2a273f;
+    color: #e5e7eb;
     margin-bottom: 1rem;
 }
 
 .empty-state-text {
-    color: #e0def4;
+    color: #6b7280;
     opacity: 0.7;
     font-size: 1.1rem;
 }
 
 /* Data visualization styles */
 .plot-container {
-    background-color: #26233a !important;
+    background-color: #ffffff !important;
     border-radius: 8px;
     padding: 1rem;
 }
 
 /* Table styling */
 .dataframe {
-    background-color: #26233a !important;
-    color: #e0def4 !important;
+    background-color: #ffffff !important;
+    color: #333333 !important;
 }
 
 .dataframe th {
-    background-color: #2a273f !important;
-    color: #9ccfd8 !important;
-    border-color: #191724 !important;
+    background-color: #f3f4f6 !important;
+    color: #3b82f6 !important;
+    border-color: #e5e7eb !important;
 }
 
 .dataframe td {
-    border-color: #191724 !important;
+    border-color: #e5e7eb !important;
 }
 
 /* Custom dashboard layout helpers */
@@ -223,7 +270,7 @@ h1, h2, h3, h4, h5, h6 {
     align-items: center;
     margin-bottom: 1.5rem;
     padding-bottom: 1rem;
-    border-bottom: 1px solid #2a273f;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .app-logo {
@@ -237,7 +284,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .app-subtitle {
     margin: 0;
-    color: #c4a7e7;
+    color: #6b7280;
     font-weight: normal;
     opacity: 0.8;
 } 
