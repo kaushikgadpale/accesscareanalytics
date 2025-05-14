@@ -33,8 +33,8 @@ async def fetch_calendar_events(start_date, end_date, max_results=500, user_id="
         
         # Set up query parameters
         query_params = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters(
-            startDateTime=start_str,
-            endDateTime=end_str,
+            start_date_time=start_str,
+            end_date_time=end_str,
             top=max_results,
             select=["subject", "start", "end", "attendees", "organizer", "location", "body", "categories", "importance"]
         )
@@ -107,19 +107,35 @@ async def fetch_forms_responses(form_id):
         
         # Get form details
         try:
-            form = await graph_client.users.by_user_id("me").forms.form_id(form_id).get()
+            # Attempt to get the form details
+            form = await graph_client.users.by_user_id("me").forms.by_form_id(form_id).get()
             if not form:
                 st.warning(f"Form with ID {form_id} not found")
                 return None
             
             # Get form responses
-            responses = await graph_client.users.by_user_id("me").forms.form_id(form_id).responses.get()
+            responses = await graph_client.users.by_user_id("me").forms.by_form_id(form_id).responses.get()
             if not responses or not responses.value:
                 st.warning("No responses found for this form")
                 return None
         except Exception as e:
-            st.error(f"Failed to access form: {str(e)}")
-            st.info("Note: You may need additional permissions to access Forms data. Make sure your app has 'Forms.Read.All' permission.")
+            error_message = str(e)
+            st.error(f"Failed to access form: {error_message}")
+            
+            # Provide more detailed troubleshooting guidance
+            st.markdown("""
+            <div style="background-color: #ffebee; padding: 1rem; border-radius: 10px; margin-top: 1rem;">
+                <h4 style="margin-top: 0; color: #c62828;">Microsoft Forms API Limitations</h4>
+                <p>Microsoft Graph API has limited support for Forms data. Try the following:</p>
+                <ul>
+                    <li>Verify your app has <code>Forms.Read.All</code> permission in Azure AD</li>
+                    <li>Ensure you are using the correct Form ID - check the URL of your form</li>
+                    <li>Verify you are the owner of the form or have proper permissions</li>
+                    <li>Try using the direct Forms API endpoint with the appropriate scope</li>
+                </ul>
+                <p>Note: If you continue to experience issues, Microsoft Forms data may need to be accessed through alternative methods such as Power Automate or the Excel export feature in Forms.</p>
+            </div>
+            """, unsafe_allow_html=True)
             return None
         
         # Process form responses
@@ -170,6 +186,18 @@ async def fetch_forms_responses(form_id):
         return form_data
     except Exception as e:
         st.error(f"Failed to fetch form responses: {str(e)}")
+        st.markdown("""
+        <div style="background-color: #ffebee; padding: 1rem; border-radius: 10px; margin-top: 1rem;">
+            <h4 style="margin-top: 0; color: #c62828;">Connection Error</h4>
+            <p>There was a problem connecting to the Microsoft Forms service. Please check:</p>
+            <ul>
+                <li>Your internet connection</li>
+                <li>Your authentication credentials</li>
+                <li>That the Microsoft Graph API is available</li>
+            </ul>
+            <p>You may also need to check the Microsoft 365 Service Health Dashboard for any outages.</p>
+        </div>
+        """, unsafe_allow_html=True)
         return None
 
 def render_calendar_tab(df):
@@ -318,16 +346,35 @@ def render_calendar_tab(df):
                 else:
                     st.warning("No calendar events found in the selected date range")
             except Exception as e:
-                st.error(f"Error fetching calendar events: {str(e)}")
-                st.markdown("""
+                error_message = str(e)
+                st.error(f"Error fetching calendar events: {error_message}")
+                
+                # Show more detailed troubleshooting information
+                st.markdown(f"""
                 <div style="background-color: #ffebee; padding: 1rem; border-radius: 10px; margin-top: 1rem;">
-                    <h4 style="margin-top: 0; color: #c62828;">Troubleshooting</h4>
-                    <p>If you're seeing permission errors, ensure your Azure AD app has the following permissions:</p>
+                    <h4 style="margin-top: 0; color: #c62828;">Troubleshooting Calendar Integration</h4>
+                    <p>The following error occurred: <code>{error_message}</code></p>
+                    
+                    <h5 style="color: #c62828; margin-top: 0.8rem;">Common Issues</h5>
                     <ul>
-                        <li><code>Calendars.Read</code> - To read calendar data</li>
-                        <li><code>Calendars.Read.Shared</code> - To read shared calendars (optional)</li>
+                        <li><strong>Parameter name errors:</strong> If you see an error about unexpected arguments like 'startDateTime', this is likely due to Microsoft Graph SDK API changes. Parameter names are now in snake_case format.</li>
+                        <li><strong>Permission errors:</strong> Ensure your Azure AD app has the following permissions:
+                            <ul>
+                                <li><code>Calendars.Read</code> - To read calendar data</li>
+                                <li><code>Calendars.Read.Shared</code> - To read shared calendars (optional)</li>
+                            </ul>
+                        </li>
+                        <li><strong>Authentication errors:</strong> Make sure your authentication credentials are valid and not expired</li>
+                        <li><strong>Date formatting issues:</strong> Ensure dates are properly formatted in ISO 8601 format</li>
                     </ul>
-                    <p>Also make sure your application is properly authenticated and has valid credentials.</p>
+                    
+                    <h5 style="color: #c62828; margin-top: 0.8rem;">Additional Steps</h5>
+                    <ol>
+                        <li>Check that your Microsoft 365 account has access to Outlook calendar</li>
+                        <li>Verify network connectivity to Microsoft Graph API endpoints</li>
+                        <li>Try with a smaller date range to reduce the data volume</li>
+                        <li>Check the Microsoft 365 Service Health Dashboard for any outages</li>
+                    </ol>
                 </div>
                 """, unsafe_allow_html=True)
     

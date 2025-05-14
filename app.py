@@ -638,7 +638,7 @@ def display_empty_tab(tab_name):
         <img src="https://img.icons8.com/fluency/96/000000/data-pending.png" width="64">
         <h3 style="margin-top: 1rem; color: {THEME_CONFIG['DARK_COLOR']};">{tab_name}</h3>
         <p style="color: {THEME_CONFIG['DARK_COLOR']}; max-width: 500px; margin: 1rem auto;">
-            No data available. Please use the "Fetch Appointment Data" button to load data.
+            This tab will display information when data is available. Use the filters in the sidebar to customize your view.
         </p>
     </div>
     """, unsafe_allow_html=True)
