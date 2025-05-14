@@ -631,15 +631,21 @@ def create_utilization_dashboard(df):
         top_client = client_performance.sort_values('Utilization Rate', ascending=False).iloc[0]
         bottom_client = client_performance.sort_values('Utilization Rate').iloc[0]
         
-        st.markdown(f"""
+        st.markdown("""
         <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
             <strong>📊 Insights:</strong>
-            <ul>
-                <li>Top performing client: <strong>{top_client['Client']}</strong> with {top_client['Utilization Rate']:.1f}% utilization rate</li>
-                <li>Opportunity for improvement: <strong>{bottom_client['Client']}</strong> with {bottom_client['Utilization Rate']:.1f}% utilization rate</li>
-            </ul>
-        </div>
         """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        - Most profitable client: **{top_client['Client']}** with {top_client['Utilization Rate']:.1f}% utilization rate
+        """)
+        
+        if bottom_client is not None:
+            st.markdown(f"""
+            - Opportunity for improvement: **{bottom_client['Client']}** with {bottom_client['Utilization Rate']:.1f}% utilization rate
+            """)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
     
     # Time series analysis
     if 'Date of Service' in df.columns and 'Utilization Rate' in df.columns:
@@ -835,7 +841,7 @@ def create_pnl_dashboard(df):
             text_auto='$.2s'
         )
         
-        fig.update_traces(textposition='outside')
+        fig.update_traces(texttemplate='${text:,.2f}', textposition='outside')
         fig.update_layout(
             xaxis_title="Client",
             yaxis_title="Net Profit ($)",
@@ -850,25 +856,145 @@ def create_pnl_dashboard(df):
         top_client = client_profit.sort_values('Net_Profit', ascending=False).iloc[0]
         bottom_client = client_profit[client_profit['Net_Profit'] < 0].sort_values('Net_Profit').iloc[0] if len(client_profit[client_profit['Net_Profit'] < 0]) > 0 else None
         
-        insight_text = f"""
+        st.markdown("""
         <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
             <strong>📊 Insights:</strong>
-            <ul>
-                <li>Most profitable client: <strong>{top_client['Client']}</strong> with ${top_client['Net_Profit']:,.2f} net profit 
-                ({top_client['Profit_Margin']:.1%} margin)</li>
-        """
+        """, unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        - Most profitable client: **{top_client['Client']}** with ${top_client['Net_Profit']:,.2f} net profit ({top_client['Profit_Margin']:.1%} margin)
+        """)
         
         if bottom_client is not None:
-            insight_text += f"""
-                <li>Attention needed: <strong>{bottom_client['Client']}</strong> is showing a loss of ${abs(bottom_client['Net_Profit']):,.2f}</li>
-            """
-            
-        insight_text += """
-            </ul>
-        </div>
-        """
+            st.markdown(f"""
+            - Attention needed: **{bottom_client['Client']}** is showing a loss of ${abs(bottom_client['Net_Profit']):,.2f}
+            """)
         
-        st.markdown(insight_text, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Add detailed analysis button
+        if st.button("Get Detailed CEO Analysis"):
+            st.markdown("""
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 20px;">
+                <h3 style="color: #2c3e50; margin-top: 0;">📊 CEO Financial Analysis Report</h3>
+            """, unsafe_allow_html=True)
+
+            # 1. Overall Financial Health
+            st.markdown("### 1. Overall Financial Health")
+            total_revenue = df['Revenue_Total'].sum()
+            total_expenses = df['Expense_COGS_Total'].sum()
+            total_profit = df['Net_Profit'].sum()
+            overall_margin = total_profit / total_revenue if total_revenue > 0 else 0
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Revenue", f"${total_revenue:,.2f}")
+            with col2:
+                st.metric("Total Expenses", f"${total_expenses:,.2f}")
+            with col3:
+                st.metric("Overall Profit Margin", f"{overall_margin:.1%}")
+
+            # 2. Client Portfolio Analysis
+            st.markdown("### 2. Client Portfolio Analysis")
+            client_metrics = df.groupby('Client').agg({
+                'Revenue_Total': 'sum',
+                'Expense_COGS_Total': 'sum',
+                'Net_Profit': 'sum'
+            }).reset_index()
+            
+            client_metrics['Profit_Margin'] = client_metrics['Net_Profit'] / client_metrics['Revenue_Total']
+            client_metrics['Revenue_Share'] = client_metrics['Revenue_Total'] / total_revenue
+            
+            # Sort by revenue share
+            client_metrics = client_metrics.sort_values('Revenue_Share', ascending=False)
+            
+            # Display top 5 clients by revenue
+            st.markdown("#### Top 5 Clients by Revenue")
+            for _, client in client_metrics.head().iterrows():
+                st.markdown(f"""
+                - **{client['Client']}**
+                    - Revenue: ${client['Revenue_Total']:,.2f} ({client['Revenue_Share']:.1%} of total)
+                    - Profit: ${client['Net_Profit']:,.2f} ({client['Profit_Margin']:.1%} margin)
+                """)
+
+            # 3. Revenue Stream Analysis
+            st.markdown("### 3. Revenue Stream Analysis")
+            revenue_streams = {
+                'Wellness Fund': df['Revenue_WellnessFund'].sum() if 'Revenue_WellnessFund' in df.columns else 0,
+                'Dental Claims': df['Revenue_DentalClaim'].sum() if 'Revenue_DentalClaim' in df.columns else 0,
+                'Medical Claims': df['Revenue_MedicalClaim_InclCancelled'].sum() if 'Revenue_MedicalClaim_InclCancelled' in df.columns else 0,
+                'Missed Appointments': df['Revenue_MissedAppointments'].sum() if 'Revenue_MissedAppointments' in df.columns else 0
+            }
+            
+            # Calculate percentages
+            total_stream_revenue = sum(revenue_streams.values())
+            revenue_streams = {k: (v, v/total_stream_revenue if total_stream_revenue > 0 else 0) 
+                             for k, v in revenue_streams.items() if v > 0}
+            
+            st.markdown("#### Revenue Distribution by Stream")
+            for stream, (amount, percentage) in revenue_streams.items():
+                st.markdown(f"- **{stream}**: ${amount:,.2f} ({percentage:.1%} of total)")
+
+            # 4. Trend Analysis
+            st.markdown("### 4. Trend Analysis")
+            if 'Service_Month' in df.columns:
+                monthly_trends = df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
+                    'Revenue_Total': 'sum',
+                    'Expense_COGS_Total': 'sum',
+                    'Net_Profit': 'sum'
+                }).reset_index()
+                
+                monthly_trends['Profit_Margin'] = monthly_trends['Net_Profit'] / monthly_trends['Revenue_Total']
+                
+                # Calculate month-over-month changes
+                monthly_trends['Revenue_Change'] = monthly_trends['Revenue_Total'].pct_change()
+                monthly_trends['Profit_Change'] = monthly_trends['Net_Profit'].pct_change()
+                
+                # Get latest month's data
+                latest_month = monthly_trends.iloc[-1]
+                previous_month = monthly_trends.iloc[-2] if len(monthly_trends) > 1 else None
+                
+                st.markdown("#### Latest Month Performance")
+                st.markdown(f"""
+                - Revenue: ${latest_month['Revenue_Total']:,.2f} 
+                    {f"({latest_month['Revenue_Change']:.1%} vs previous month)" if previous_month is not None else ""}
+                - Profit: ${latest_month['Net_Profit']:,.2f}
+                    {f"({latest_month['Profit_Change']:.1%} vs previous month)" if previous_month is not None else ""}
+                - Profit Margin: {latest_month['Profit_Margin']:.1%}
+                """)
+
+            # 5. Recommendations
+            st.markdown("### 5. Strategic Recommendations")
+            
+            # Analyze client concentration
+            top_3_revenue_share = client_metrics.head(3)['Revenue_Share'].sum()
+            if top_3_revenue_share > 0.5:
+                st.markdown("""
+                ⚠️ **Client Concentration Risk**
+                - Top 3 clients account for more than 50% of revenue
+                - Consider diversifying client base to reduce dependency
+                """)
+            
+            # Analyze profit margins
+            low_margin_clients = client_metrics[client_metrics['Profit_Margin'] < 0.1]
+            if not low_margin_clients.empty:
+                st.markdown("""
+                💡 **Margin Improvement Opportunities**
+                - Several clients show low profit margins
+                - Consider reviewing pricing strategy or cost structure
+                """)
+            
+            # Analyze revenue streams
+            if revenue_streams:
+                dominant_stream = max(revenue_streams.items(), key=lambda x: x[1][1])
+                if dominant_stream[1][1] > 0.4:
+                    st.markdown(f"""
+                    🔄 **Revenue Stream Diversification**
+                    - {dominant_stream[0]} accounts for more than 40% of revenue
+                    - Consider expanding other revenue streams
+                    """)
+
+            st.markdown("</div>", unsafe_allow_html=True)
     
     # Location Performance
     if 'Site_Location' in df.columns and 'Net_Profit' in df.columns:
