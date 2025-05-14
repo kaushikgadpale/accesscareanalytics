@@ -1,21 +1,18 @@
-streamlit>=1.45.0
-requests>=2.31.0
-pytz>=2024.1
-pandas>=2.2.0
-numpy>=1.26.0
-plotly>=5.18.0
-azure-identity>=1.15.0
-matplotlib>=3.8.0
+streamlit>=1.22.0
+pandas>=1.5.3
+numpy>=1.24.3
+plotly>=5.14.1
+python-dotenv>=1.0.0
+pytz>=2023.3
+requests>=2.30.0
+msgraph-core>=0.2.2
+msgraph-sdk>=1.0.0
 
 # For webhook server and env loading
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 python-dotenv>=1.0.0
 msal>=1.25.0
-
-# Microsoft Graph SDK
-msgraph-sdk>=1.0.0
-msgraph-core>=1.0.0
 
 # Additional dependencies
 aiohttp>=3.9.0

@@ -1,126 +1,80 @@
 # Access Care Analytics Dashboard
 
-A comprehensive analytics dashboard for Microsoft Bookings data, providing insights into appointments, patient analysis, and contact management.
+A comprehensive healthcare analytics and operational intelligence dashboard for Access Care.
+
+## Overview
+
+This dashboard provides unified analytics and operational intelligence for healthcare appointment management, patient communication, and business operations. It features a dark-themed, professional interface with intuitive navigation and powerful data visualization.
 
 ## Features
 
-- 📋 Appointments Overview
-- 👥 Patient Analysis
-- 🏢 Client Overview
-- 📞 Phone Number Validation
-- 🧩 Service Mix Analysis
-- 🚨 Cancellation Insights
-- 📇 Contact Export (Outlook Format)
-- 📊 Year over Year Comparison (2024 vs 2025)
-- 📅 Calendar Integration
-- 📝 Microsoft Forms Integration
-- 📊 Real-time Updates via Webhooks
-
-## Prerequisites
-
-- Python 3.11 or higher
-- Microsoft Azure Account with Bookings API access
-- Azure AD Application with appropriate permissions
-
-### Required Azure AD Permissions
-
-- Bookings.Read.All
-- BookingsAppointment.Read.All
-- BookingsAppointment.ReadWrite.All (if using webhooks)
-- Calendars.Read (for calendar integration)
-- Forms.Read.All (for MS Forms integration)
+- **Dashboard Analytics**: Track appointment bookings, status distribution, and performance metrics
+- **Patient & Client Management**: Contact management, communication tools, and data export
+- **Tools**: Phone validation, API inspection, and date/time utilities
+- **Integrations**: Microsoft Graph API, Airtable, and webhook connections
+- **Content Creator**: Templates and SOW generation tools
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd accesscareanalytics
+1. Clone this repository:
+   ```
+   git clone <repository-url>
+   cd accesscareanalytics
+   ```
+
+2. Install the required dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+
+3. Create a `.env` file with your credentials:
+   ```
+   AZURE_CLIENT_ID=your-client-id
+   AZURE_CLIENT_SECRET=your-client-secret
+   AZURE_TENANT_ID=your-tenant-id
+   AIRTABLE_API_KEY=your-airtable-key
+   AIRTABLE_BASE_ID=your-airtable-base
+   ```
+
+## Running the Dashboard
+
+To run the dashboard locally:
+
 ```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-```bash
-cp .env.example .env
-```
-Edit .env with your Azure AD credentials and other configurations.
-
-## Configuration
-
-Required environment variables:
-
-```env
-AZURE_TENANT_ID=your_tenant_id
-AZURE_CLIENT_ID=your_client_id
-AZURE_CLIENT_SECRET=your_client_secret
-```
-
-Optional configurations:
-- `DEBUG`: Set to "True" for development
-- `ENVIRONMENT`: "development" or "production"
-- `TZ`: Timezone (default: UTC)
-- `WEBHOOK_PUBLIC_URL`: For real-time updates
-- `WEBHOOK_SECRET`: Webhook security
-
-## Running Locally
-
-```bash
 streamlit run app.py
 ```
 
-## Deployment
+The dashboard will be available at http://localhost:8501.
 
-### Deploying to Render
+## Required Files
 
-1. Create a new Web Service on Render
-2. Connect your repository
-3. Configure the service:
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `streamlit run app.py`
-   - Environment Variables: Add all required variables
+Make sure you have all these files in your project directory:
 
-### Environment Variables on Render
+- `app.py`: Main application file
+- `config.py`: Configuration settings
+- `icons.py`: Icon definitions and utilities
+- `styles.css`: Custom CSS styling
+- `ms_integrations.py`: Microsoft integrations
+- `airtable_integration.py`: Airtable integration
+- `phone_formatter.py`: Phone validation utilities
 
-Make sure to set these in your Render dashboard:
-- `AZURE_TENANT_ID`
-- `AZURE_CLIENT_ID`
-- `AZURE_CLIENT_SECRET`
-- `ENVIRONMENT=production`
-- Other optional configurations
+## Custom Logo
 
-## Troubleshooting
+The dashboard uses a dynamically generated logo by default. To use your own logo:
 
-Common issues and solutions:
+1. Add a file named `logo.png` to the project root directory
+2. The logo will be automatically detected and used
 
-1. Authentication Errors:
-   - Verify Azure AD credentials
-   - Check required permissions
-   - Ensure correct tenant ID
+## Color Theme
 
-2. Deployment Issues:
-   - Check Python version compatibility
-   - Verify all dependencies are installed
-   - Check environment variables
+The dashboard uses a professional dark color theme. You can customize the colors in `config.py` under the `THEME_CONFIG` dictionary.
 
-3. Data Loading Issues:
-   - Verify Microsoft Bookings access
-   - Check API permissions
-   - Confirm date range settings
+## Screenshots
 
-## Support
-
-For issues and feature requests, please create an issue in the repository.
+[Screenshots will be added here]
 
 ## License
 
-[Include your license information here] 
+This project is proprietary and confidential.
+
+© 2023 Access Care Analytics. All rights reserved. 

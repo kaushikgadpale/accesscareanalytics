@@ -46,85 +46,46 @@ async def fetch_calendar_events(start_date, end_date, max_results=500, user_id="
         start_str = start_datetime.isoformat().replace('+00:00', 'Z')
         end_str = end_datetime.isoformat().replace('+00:00', 'Z')
         
-        # First try to use the API directly without query parameters
+        st.info("Attempting to fetch calendar events...")
+        
+        # Most basic approach possible - just get all events
         try:
-            # Try to get events directly with filtering in the URL
-            events_url = f"/me/calendar/events?startDateTime={start_str}&endDateTime={end_str}&$top={max_results}"
-            result = await graph_client.request(method="GET", url=events_url)
-            
-            if result and hasattr(result, "value") and result.value:
-                # Return events from direct request
-                return process_calendar_events(result.value)
-        except Exception as direct_err:
-            st.warning(f"Direct API request failed, trying with query parameters: {str(direct_err)}")
-        
-        # If direct request failed, try with request builder and different parameter naming conventions
-        parameter_combinations = [
-            # Try with standard parameter naming
-            {"startDateTime": start_str, "endDateTime": end_str},
-            # Try with snake_case parameter naming
-            {"start_date_time": start_str, "end_date_time": end_str},
-            # Try with simple parameter naming
-            {"start": start_str, "end": end_str}
-        ]
-        
-        for params in parameter_combinations:
-            try:
-                # Construct query parameters
-                query_params_dict = {
-                    **params,
-                    "top": max_results,
-                    "select": ["subject", "start", "end", "attendees", "organizer", "location", "body", "categories", "importance"]
-                }
-                
-                # Log parameters being tried
-                st.info(f"Trying with parameters: {list(params.keys())}")
-                
-                # Create query parameters object
-                query_params = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters(**query_params_dict)
-                request_configuration = RequestConfiguration(query_parameters=query_params)
-                
-                # Get events
-                result = await graph_client.users.by_user_id(user_id).calendar.events.get(
-                    request_configuration=request_configuration
-                )
-                
-                if result and hasattr(result, "value") and result.value:
-                    st.success(f"Successfully fetched events with parameters: {list(params.keys())}")
-                    return process_calendar_events(result.value)
-                else:
-                    st.warning("No events found with this parameter configuration")
-            except Exception as e:
-                st.warning(f"Parameter combination {list(params.keys())} failed: {str(e)}")
-                continue
-        
-        # If all parameter combinations failed, try with OData filter
-        try:
-            # Create filter-based query
-            filter_query = f"start/dateTime ge '{start_str}' and end/dateTime le '{end_str}'"
-            query_params = EventsRequestBuilder.EventsRequestBuilderGetQueryParameters(
-                filter=filter_query,
-                top=max_results,
-                select=["subject", "start", "end", "attendees", "organizer", "location", "body", "categories", "importance"]
-            )
-            
-            request_configuration = RequestConfiguration(query_parameters=query_params)
-            
-            # Get events with filter
-            result = await graph_client.users.by_user_id(user_id).calendar.events.get(
-                request_configuration=request_configuration
-            )
-            
-            if result and hasattr(result, "value") and result.value:
-                st.success("Successfully fetched events with OData filter")
-                return process_calendar_events(result.value)
+            # Don't use "me" as user_id, use an explicit ID or try without user ID specification
+            if user_id == "me":
+                # Try using calendar directly without specifying user
+                result = await graph_client.me.calendar.events.get()
             else:
-                st.warning("No calendar events found with OData filter approach")
-                return []
-        except Exception as filter_err:
-            st.error(f"OData filter approach failed: {str(filter_err)}")
-            return []
+                result = await graph_client.users.by_user_id(user_id).calendar.events.get()
             
+            if result and hasattr(result, "value") and result.value:
+                st.success(f"Successfully fetched {len(result.value)} events, now filtering by date range")
+                # Filter events by date manually
+                filtered_events = []
+                for event in result.value:
+                    try:
+                        if hasattr(event, "start") and hasattr(event.start, "date_time"):
+                            event_start = datetime.fromisoformat(event.start.date_time.replace('Z', '+00:00'))
+                            event_start_date = event_start.date()
+                            
+                            # Check if event is within date range
+                            if start_date <= event_start_date <= end_date:
+                                filtered_events.append(event)
+                    except Exception as filter_err:
+                        continue
+                
+                if filtered_events:
+                    st.success(f"Found {len(filtered_events)} events in the specified date range")
+                    return process_calendar_events(filtered_events)
+                else:
+                    st.warning("No events found in the specified date range")
+            else:
+                st.warning("API request returned no events")
+        except Exception as e:
+            st.error(f"Calendar API request failed: {str(e)}")
+        
+        # If all approaches fail
+        st.warning("No calendar events found for the selected date range")
+        return []
     except Exception as e:
         st.error(f"Failed to fetch calendar events: {str(e)}")
         return []
@@ -294,7 +255,8 @@ def render_calendar_tab(df):
     st.markdown("""
     <div style="background-color: white; padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
         <h4 style="margin-top: 0; color: #2c3e50;">ℹ️ Calendar Integration</h4>
-        <p style="margin-bottom: 0;">This feature fetches your Outlook/Microsoft 365 calendar events. Make sure your app has the <code>Calendars.Read</code> permission enabled to access calendar data.</p>
+        <p>This feature fetches your Outlook/Microsoft 365 calendar events. Due to Microsoft Graph API limitations, events are first retrieved without date filtering and then filtered client-side to match your selected date range.</p>
+        <p style="margin-bottom: 0; font-style: italic; color: #7f8c8d;">Note: If you have many calendar events, it may take longer to load and filter. Consider using a shorter date range if you experience performance issues.</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -336,9 +298,33 @@ def render_calendar_tab(df):
                     # Show available API information
                     st.success("Successfully connected to Microsoft Graph API")
                     
-                    # Check SDK version
-                    import msgraph_sdk
-                    st.info(f"Microsoft Graph SDK Version: {msgraph_sdk.__version__ if hasattr(msgraph_sdk, '__version__') else 'Unknown'}")
+                    # Display simple Microsoft Graph SDK information without external modules
+                    st.markdown("### Microsoft Graph SDK Information")
+                    try:
+                        # Try to get msgraph details directly from the module
+                        import msgraph
+                        st.write("Microsoft Graph SDK is available.")
+                        
+                        # Get module info if possible
+                        module_info = []
+                        
+                        # Try to get version
+                        if hasattr(msgraph, "__version__"):
+                            module_info.append(f"Version: {msgraph.__version__}")
+                        
+                        # Try to get module path
+                        try:
+                            module_info.append(f"Path: {msgraph.__file__}")
+                        except:
+                            pass
+                        
+                        if module_info:
+                            for info in module_info:
+                                st.code(info)
+                    except ImportError:
+                        st.warning("Microsoft Graph SDK (msgraph) is not directly importable.")
+                    except Exception as e:
+                        st.warning(f"Could not get SDK information: {str(e)}")
                     
                     st.markdown("### API Structure Information")
                     

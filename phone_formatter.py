@@ -351,3 +351,104 @@ def create_appointments_flow(df):
     )
     
     return bar
+
+def process_uploaded_phone_list(uploaded_file):
+    """Process an uploaded file with phone numbers and convert to dataframe"""
+    import pandas as pd
+    import io
+    
+    if uploaded_file is None:
+        return None
+    
+    try:
+        # Determine file type
+        file_type = uploaded_file.name.split('.')[-1].lower()
+        
+        if file_type == 'csv':
+            df = pd.read_csv(uploaded_file)
+        elif file_type in ['xls', 'xlsx']:
+            df = pd.read_excel(uploaded_file)
+        else:
+            return None, "Unsupported file format. Please upload a CSV or Excel file."
+        
+        # Validate the dataframe has required columns
+        required_phone_column = False
+        
+        # Check for common phone column names
+        phone_column_names = ['Phone', 'Mobile', 'Phone Number', 'Mobile Number', 
+                             'Cell', 'Cell Phone', 'Telephone', 'Contact Number',
+                             'Business Phone', 'Home Phone', 'Work Phone']
+        
+        found_phone_column = None
+        for col in phone_column_names:
+            if col in df.columns:
+                found_phone_column = col
+                required_phone_column = True
+                break
+        
+        if not required_phone_column:
+            return None, "No phone number column found. The file should contain a column named 'Phone', 'Mobile', 'Phone Number', etc."
+        
+        # Prepare the dataframe for processing
+        formatted_df = pd.DataFrame()
+        formatted_df['Original Phone'] = df[found_phone_column]
+        
+        # Add any name columns if available
+        if 'First Name' in df.columns:
+            formatted_df['First Name'] = df['First Name']
+        if 'Last Name' in df.columns:
+            formatted_df['Last Name'] = df['Last Name']
+        if 'Name' in df.columns and 'First Name' not in df.columns:
+            # Try to split the name
+            formatted_df['First Name'] = df['Name'].apply(lambda x: str(x).split(' ')[0] if pd.notna(x) else '')
+            formatted_df['Last Name'] = df['Name'].apply(lambda x: ' '.join(str(x).split(' ')[1:]) if pd.notna(x) and len(str(x).split(' ')) > 1 else '')
+        
+        # Add email if available
+        if 'Email' in df.columns:
+            formatted_df['Email'] = df['Email']
+        elif 'E-mail' in df.columns:
+            formatted_df['Email'] = df['E-mail']
+        elif 'E-mail Address' in df.columns:
+            formatted_df['Email'] = df['E-mail Address']
+        
+        # Format phone numbers
+        formatted_df['Formatted Phone'] = formatted_df['Original Phone'].apply(
+            lambda x: format_phone_strict(str(x)) if pd.notna(x) else ''
+        )
+        
+        # Add phone status column
+        formatted_df['Phone Status'] = formatted_df['Formatted Phone'].apply(
+            lambda x: get_phone_status(x)
+        )
+        
+        return formatted_df, None
+    except Exception as e:
+        return None, f"Error processing file: {str(e)}"
+
+def get_phone_status(phone_number):
+    """Get status of a phone number after formatting"""
+    if not phone_number:
+        return "Missing"
+    
+    if phone_number.startswith('+'):
+        if '+353' in phone_number:
+            return "Valid (Ireland)"
+        elif '+44' in phone_number:
+            return "Valid (UK)"
+        elif '+1' in phone_number:
+            return "Valid (US/Canada)"
+        elif '+971' in phone_number:
+            return "Valid (UAE)"
+        elif '+63' in phone_number:
+            return "Valid (Philippines)"
+        elif '+45' in phone_number: 
+            return "Valid (Denmark)"
+        else:
+            return "Valid (International)"
+    
+    if len(phone_number) < 10:
+        return "Too Short"
+    elif len(phone_number) > 15:
+        return "Too Long"
+    
+    return "Invalid Format"

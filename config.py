@@ -18,7 +18,8 @@ GRAPH_API_BASE = os.getenv("GRAPH_API_ENDPOINT", "https://graph.microsoft.com")
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production")
 LOCAL_TZ = pytz.timezone(os.getenv("TZ", "UTC"))
-LOGO_PATH = "image002.png" if os.path.exists("image002.png") else None
+LOGO_PATH = "logo.png" if os.path.exists("logo.png") else None
+APP_TAGLINE = "Unified healthcare analytics and operational intelligence"
 WEBHOOK_PUBLIC_URL = os.getenv("WEBHOOK_PUBLIC_URL")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 
@@ -38,21 +39,32 @@ DATE_PRESETS = {
 
 # Theme Configuration
 THEME_CONFIG = {
-    'BACKGROUND_COLOR': '#f8f9fa',
-    'TEXT_COLOR': '#212529',
-    'PRIMARY_COLOR': '#2c3e50',
-    'SECONDARY_COLOR': '#3498db',
-    'ACCENT_COLOR': '#16a085',
-    'SUCCESS_COLOR': '#2ecc71',
-    'WARNING_COLOR': '#f39c12',
-    'DANGER_COLOR': '#e74c3c',
-    'LIGHT_COLOR': '#ecf0f1',
-    'DARK_COLOR': '#34495e',
-    'SIDEBAR_BG': '#ffffff',
-    'CARD_BG': '#ffffff',
-    'CARD_SHADOW': '0 2px 8px rgba(0,0,0,0.1)',
-    'BORDER_RADIUS': '10px',
-    'FONT_FAMILY': '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+    'BACKGROUND_COLOR': '#1e1e2e',
+    'TEXT_COLOR': '#e0def4',
+    'PRIMARY_COLOR': '#9ccfd8',
+    'SECONDARY_COLOR': '#c4a7e7',
+    'ACCENT_COLOR': '#eb6f92',
+    'SUCCESS_COLOR': '#31748f',
+    'WARNING_COLOR': '#f6c177',
+    'DANGER_COLOR': '#eb6f92',
+    'LIGHT_COLOR': '#2a273f',
+    'DARK_COLOR': '#191724',
+    'SIDEBAR_BG': '#191724',
+    'CARD_BG': '#26233a',
+    'CARD_SHADOW': '0 4px 6px rgba(0,0,0,0.2)',
+    'BORDER_RADIUS': '8px',
+    'FONT_FAMILY': '"Inter", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+}
+
+# Airtable Configuration
+AIRTABLE_CONFIG = {
+    'API_KEY': '',  # Set via environment variable AIRTABLE_API_KEY
+    'BASE_ID': '',  # Set via environment variable AIRTABLE_BASE_ID
+    'SOW_TABLE': 'SOW',
+    'BOOKINGS_TABLE': 'Bookings',
+    'INVOICES_TABLE': 'Invoices',
+    'UTILIZATION_TABLE': 'Utilization',
+    'API_URL': 'https://api.airtable.com/v0'
 }
 
 # Webhook Configuration

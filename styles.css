@@ -1,0 +1,243 @@
+/* Access Care Analytics Dashboard Custom Styling */
+
+/* Global Styles */
+.stApp {
+    background-color: #1e1e2e;
+    color: #e0def4;
+}
+
+/* Main header styling */
+h1, h2, h3, h4, h5, h6 {
+    color: #9ccfd8 !important;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    font-weight: 600;
+}
+
+/* Card styling */
+.card {
+    background-color: #26233a;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    margin-bottom: 1.5rem;
+    border: 1px solid #2a273f;
+}
+
+/* Metric card styling */
+.metric-card {
+    text-align: center;
+    padding: 1rem;
+}
+
+.metric-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #c4a7e7;
+}
+
+.metric-label {
+    font-size: 1rem;
+    color: #e0def4;
+    opacity: 0.8;
+}
+
+/* Custom tabs styling */
+.custom-tab {
+    background-color: #26233a;
+    border-radius: 8px 8px 0 0;
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.custom-tab:hover {
+    background-color: #2a273f;
+}
+
+.custom-tab.active {
+    border-bottom-color: #eb6f92;
+    background-color: #2a273f;
+}
+
+/* Button styling */
+.stButton>button {
+    background-color: #31748f !important;
+    color: #e0def4 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease !important;
+}
+
+.stButton>button:hover {
+    background-color: #9ccfd8 !important;
+    color: #191724 !important;
+}
+
+/* Input field styling */
+.stTextInput>div>div>input, 
+.stNumberInput>div>div>input,
+.stDateInput>div>div>input {
+    background-color: #2a273f !important;
+    color: #e0def4 !important;
+    border: 1px solid #2a273f !important;
+    border-radius: 6px !important;
+}
+
+/* Selectbox styling */
+.stSelectbox>div>div>div {
+    background-color: #2a273f !important;
+    color: #e0def4 !important;
+    border: 1px solid #2a273f !important;
+    border-radius: 6px !important;
+}
+
+/* Sidebar styling */
+.css-1d391kg, .css-12oz5g7 {
+    background-color: #191724 !important;
+}
+
+/* Hide Streamlit branding */
+#MainMenu, footer, header {
+    visibility: hidden;
+}
+
+/* Custom info boxes */
+.info-box {
+    background-color: #2a273f;
+    border-left: 4px solid #9ccfd8;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.warning-box {
+    background-color: #2a273f;
+    border-left: 4px solid #f6c177;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0 8px 8px 0;
+}
+
+.error-box {
+    background-color: #2a273f;
+    border-left: 4px solid #eb6f92;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0 8px 8px 0;
+}
+
+/* Empty state styling */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    background-color: #26233a;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.empty-state-icon {
+    font-size: 3rem;
+    color: #2a273f;
+    margin-bottom: 1rem;
+}
+
+.empty-state-text {
+    color: #e0def4;
+    opacity: 0.7;
+    font-size: 1.1rem;
+}
+
+/* Data visualization styles */
+.plot-container {
+    background-color: #26233a !important;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+/* Table styling */
+.dataframe {
+    background-color: #26233a !important;
+    color: #e0def4 !important;
+}
+
+.dataframe th {
+    background-color: #2a273f !important;
+    color: #9ccfd8 !important;
+    border-color: #191724 !important;
+}
+
+.dataframe td {
+    border-color: #191724 !important;
+}
+
+/* Custom dashboard layout helpers */
+.dashboard-row {
+    display: flex;
+    flex-wrap: wrap;
+    margin: -0.5rem;
+}
+
+.dashboard-col {
+    flex: 1;
+    min-width: 250px;
+    padding: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .dashboard-col {
+        flex: 0 0 100%;
+    }
+}
+
+/* Utility classes */
+.text-center {
+    text-align: center;
+}
+
+.mb-0 {
+    margin-bottom: 0 !important;
+}
+
+.mb-1 {
+    margin-bottom: 0.5rem !important;
+}
+
+.mb-2 {
+    margin-bottom: 1rem !important;
+}
+
+.mt-2 {
+    margin-top: 1rem !important;
+}
+
+.p-2 {
+    padding: 1rem !important;
+}
+
+/* App header with logo and title */
+.app-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #2a273f;
+}
+
+.app-logo {
+    height: 50px;
+    margin-right: 1rem;
+}
+
+.app-title {
+    margin: 0;
+}
+
+.app-subtitle {
+    margin: 0;
+    color: #c4a7e7;
+    font-weight: normal;
+    opacity: 0.8;
+} 
