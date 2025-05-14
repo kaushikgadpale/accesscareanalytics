@@ -96,20 +96,25 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Enhanced UI styling
+# Enhanced UI styling with new color palette
 st.markdown(f"""
 <style>
     .main {{
         background-color: {THEME_CONFIG['BACKGROUND_COLOR']};
         color: {THEME_CONFIG['TEXT_COLOR']};
+        font-family: {THEME_CONFIG['FONT_FAMILY']};
     }}
     .stDataFrame {{
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-radius: {THEME_CONFIG['BORDER_RADIUS']};
+        box-shadow: {THEME_CONFIG['CARD_SHADOW']};
         overflow: hidden;
     }}
     .stTabs [data-baseweb="tab-list"] {{
         gap: 24px;
+        background-color: {THEME_CONFIG['LIGHT_COLOR']};
+        padding: 0.75rem 1rem 0 1rem;
+        border-radius: {THEME_CONFIG['BORDER_RADIUS']} {THEME_CONFIG['BORDER_RADIUS']} 0 0;
+        margin-top: 1rem;
     }}
     .stTabs [data-baseweb="tab"] {{
         height: 50px;
@@ -124,9 +129,17 @@ st.markdown(f"""
         font-weight: 500;
     }}
     .stTabs [aria-selected="true"] {{
-        background-color: rgba(0, 0, 0, 0.05);
-        border-radius: 4px;
+        background-color: {THEME_CONFIG['CARD_BG']};
+        border-radius: 4px 4px 0 0;
         font-weight: 600;
+        color: {THEME_CONFIG['PRIMARY_COLOR']};
+        border-bottom: 2px solid {THEME_CONFIG['PRIMARY_COLOR']};
+    }}
+    .stTabs [data-baseweb="tab-panel"] {{
+        background-color: {THEME_CONFIG['CARD_BG']};
+        border-radius: 0 0 {THEME_CONFIG['BORDER_RADIUS']} {THEME_CONFIG['BORDER_RADIUS']};
+        padding: 1.5rem;
+        box-shadow: {THEME_CONFIG['CARD_SHADOW']};
     }}
     h1, h2, h3 {{
         color: {THEME_CONFIG['PRIMARY_COLOR']} !important;
@@ -147,7 +160,7 @@ st.markdown(f"""
         margin-bottom: 0.8rem;
     }}
     .stSidebar {{
-        background-color: #f8f9fa;
+        background-color: {THEME_CONFIG['SIDEBAR_BG']};
         border-right: 1px solid #eaeaea;
     }}
     .stSidebar [data-testid="stSidebarNav"] {{
@@ -158,16 +171,19 @@ st.markdown(f"""
         font-weight: 600;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         transition: all 0.2s ease;
+        background-color: {THEME_CONFIG['SECONDARY_COLOR']};
+        color: white;
     }}
     .stButton>button:hover {{
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        background-color: {THEME_CONFIG['PRIMARY_COLOR']};
     }}
     div[data-testid="metric-container"] {{
-        background-color: white;
-        border-radius: 12px;
+        background-color: {THEME_CONFIG['CARD_BG']};
+        border-radius: {THEME_CONFIG['BORDER_RADIUS']};
         padding: 1.5rem 1rem;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        box-shadow: {THEME_CONFIG['CARD_SHADOW']};
     }}
     div[data-testid="metric-container"] > div {{
         width: 100%;
@@ -179,14 +195,14 @@ st.markdown(f"""
     div[data-testid="metric-container"] .css-1wivap2 {{
         font-size: 2.2rem;
         font-weight: 700;
-        color: #333;
+        color: {THEME_CONFIG['DARK_COLOR']};
     }}
     div[data-testid="metric-container"] .css-1wivap2 p {{
         line-height: 1;
         margin-bottom: 4px;
     }}
     .stDownloadButton>button {{
-        background-color: {THEME_CONFIG['PRIMARY_COLOR']};
+        background-color: {THEME_CONFIG['ACCENT_COLOR']};
         color: white;
         border: none;
         padding: 0.5rem 1rem;
@@ -194,13 +210,35 @@ st.markdown(f"""
         border-radius: 6px;
     }}
     .stPlotlyChart {{
-        background-color: white;
+        background-color: {THEME_CONFIG['CARD_BG']};
         padding: 12px;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-radius: {THEME_CONFIG['BORDER_RADIUS']};
+        box-shadow: {THEME_CONFIG['CARD_SHADOW']};
     }}
     .css-1544g2n.e1fqkh3o4 {{
         padding-top: 2rem;
+    }}
+    .stAlert {{
+        border-radius: {THEME_CONFIG['BORDER_RADIUS']};
+    }}
+    .stAlert [data-testid="stMarkdownContainer"] p {{
+        font-size: 1rem;
+    }}
+    .success {{
+        background-color: {THEME_CONFIG['SUCCESS_COLOR']}22;
+        border-left-color: {THEME_CONFIG['SUCCESS_COLOR']};
+    }}
+    .warning {{
+        background-color: {THEME_CONFIG['WARNING_COLOR']}22;
+        border-left-color: {THEME_CONFIG['WARNING_COLOR']};
+    }}
+    .error {{
+        background-color: {THEME_CONFIG['DANGER_COLOR']}22;
+        border-left-color: {THEME_CONFIG['DANGER_COLOR']};
+    }}
+    .info {{
+        background-color: {THEME_CONFIG['SECONDARY_COLOR']}22;
+        border-left-color: {THEME_CONFIG['SECONDARY_COLOR']};
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -230,20 +268,34 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🏢 Businesses")
     
-    # Businesses with clear sections
+    # Businesses with clear sections and alphabetical grouping
     try:
         businesses = asyncio.run(fetch_businesses())
         selected_businesses = []
+        
         if businesses:
             st.markdown(f"<p style='color: #2c3e50;'><strong>Found {len(businesses)} businesses</strong></p>", unsafe_allow_html=True)
             all_selected = st.checkbox("Select All Businesses", True, key="select_all_businesses")
             
-            # Create scrollable container for businesses
-            with st.container():
-                for idx, biz in enumerate(businesses):
-                    checkbox_key = f"business_checkbox_{biz['name']}_{idx}"
-                    if st.checkbox(biz["name"], all_selected, key=checkbox_key):
-                        selected_businesses.append(biz["name"])
+            # Sort businesses alphabetically
+            sorted_businesses = sorted(businesses, key=lambda x: x["name"])
+            
+            # Group businesses by first two letters
+            business_groups = {}
+            for biz in sorted_businesses:
+                # Get first two letters or just first letter if name is too short
+                prefix = biz["name"][:2].upper() if len(biz["name"]) >= 2 else biz["name"][0].upper()
+                if prefix not in business_groups:
+                    business_groups[prefix] = []
+                business_groups[prefix].append(biz)
+            
+            # Display businesses by group
+            for prefix, group in sorted(business_groups.items()):
+                with st.expander(f"{prefix} ({len(group)})", expanded=True):
+                    for idx, biz in enumerate(group):
+                        checkbox_key = f"business_checkbox_{biz['name']}_{idx}"
+                        if st.checkbox(biz["name"], all_selected, key=checkbox_key):
+                            selected_businesses.append(biz["name"])
         else:
             st.warning("No businesses found. Please check your Microsoft Bookings permissions.")
     except Exception as e:
@@ -291,6 +343,25 @@ fetch_container = st.container()
 with fetch_container:
     fetch_button = st.button("🔄 Fetch Appointment Data", use_container_width=True)
 
+# Initialize session state for tabs if not already present
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0
+
+# Always create tabs
+tabs = st.tabs([
+    "📋 Appointments",
+    "👥 Patient Analysis",
+    "🏢 Client Overview",
+    "📞 Phone Validation",
+    "🧩 Service Mix",
+    "🚨 Cancellations",
+    "📇 Contact Export",
+    "📊 YoY Comparison",
+    "📅 Calendar",
+    "📝 MS Forms"
+])
+
+# Process data fetching if button is clicked
 if fetch_button:
     with st.spinner("Collecting data from multiple sources..."):
         try:
@@ -560,50 +631,51 @@ if fetch_button:
         except Exception as e:
             st.error(f"Error fetching appointments: {str(e)}")
 
+# Define a function to display empty tab content
+def display_empty_tab(tab_name):
+    st.markdown(f"""
+    <div style="text-align: center; padding: 3rem 1rem; background-color: {THEME_CONFIG['LIGHT_COLOR']}; border-radius: {THEME_CONFIG['BORDER_RADIUS']};">
+        <img src="https://img.icons8.com/fluency/96/000000/data-pending.png" width="64">
+        <h3 style="margin-top: 1rem; color: {THEME_CONFIG['DARK_COLOR']};">{tab_name}</h3>
+        <p style="color: {THEME_CONFIG['DARK_COLOR']}; max-width: 500px; margin: 1rem auto;">
+            No data available. Please use the "Fetch Appointment Data" button to load data.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ─── Display Tabs ────────────────────────────────────────────────────────────
-if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
-    st.markdown("---")
-    st.subheader("📋 Detailed Analysis")
-    
-    df = st.session_state.appointment_data.copy()
-
-    tabs = st.tabs([
-        "📋 Appointments",
-        "👥 Patient Analysis",
-        "🏢 Client Overview",
-        "📞 Phone Validation",
-        "🧩 Service Mix",
-        "🚨 Cancellations",
-        "📇 Contact Export",
-        "📊 YoY Comparison",
-        "📅 Calendar",
-        "📝 MS Forms"
-    ])
-
-    # — Appointments —
-    with tabs[0]:
-        st.header("Appointments Overview")
+# Handle tab content
+with tabs[0]:  # Appointments
+    st.header("Appointments Overview")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         filtered_df = filter_appointments(df)
         display_appointment_metrics(filtered_df)
         display_appointment_table(filtered_df)
+    else:
+        display_empty_tab("Appointments Overview")
 
-    # — Patient Analysis —
-    with tabs[1]:
-        st.header("Patient Analysis")
+with tabs[1]:  # Patient Analysis
+    st.header("Patient Analysis")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         unique_patients, booking_freq, service_usage, service_counts_dist = analyze_patients(df)
         create_patient_analysis_charts(unique_patients, booking_freq, service_usage, service_counts_dist)
+    else:
+        display_empty_tab("Patient Analysis")
 
-    # — Client Overview —
-    with tabs[2]:
-        st.header("Client Overview")
+with tabs[2]:  # Client Overview
+    st.header("Client Overview")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         client_analysis = analyze_clients(df)
         create_client_analysis_charts(client_analysis)
+    else:
+        display_empty_tab("Client Overview")
 
-    # — Phone Validation —
-    with tabs[3]:
-        st.header("Phone Number Validation")
-        
+with tabs[3]:  # Phone Validation
+    st.header("Phone Number Validation")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         # Get phone analysis with unique numbers
         phone_status_df = format_phone_dataframe(df)
         phone_pie, phone_tree = create_phone_analysis(phone_status_df)
@@ -650,22 +722,30 @@ if st.session_state.get('fetch_complete', False) and not st.session_state.get('a
         
         Only valid phone numbers will be included in the contact export.
         """)
+    else:
+        display_empty_tab("Phone Number Validation")
 
-    # — Service Mix —
-    with tabs[4]:
-        st.header("Service Mix Analysis")
+with tabs[4]:  # Service Mix
+    st.header("Service Mix Analysis")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         service_counts, duration_analysis = analyze_service_mix(df)
         create_service_mix_charts(service_counts, duration_analysis)
+    else:
+        display_empty_tab("Service Mix Analysis")
 
-    # — Cancellations —
-    with tabs[5]:
-        st.header("Cancellation Analysis")
+with tabs[5]:  # Cancellations
+    st.header("Cancellation Analysis")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         display_cancellation_insights(df)
+    else:
+        display_empty_tab("Cancellation Analysis")
 
-    # — Contact Export —
-    with tabs[6]:
-        st.header("Contact Export")
-        
+with tabs[6]:  # Contact Export
+    st.header("Contact Export")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         # Create two columns for the export and validation sections
         export_col, validation_col = st.columns(2)
         
@@ -730,11 +810,13 @@ if st.session_state.get('fetch_complete', False) and not st.session_state.get('a
             st.write("### Country Distribution")
             if phone_tree:
                 st.plotly_chart(phone_tree, use_container_width=True, key="export_phone_tree")
-                
-    # — Year over Year Comparison —
-    with tabs[7]:
-        st.header("Year over Year Comparison: 2024 vs 2025")
-        
+    else:
+        display_empty_tab("Contact Export")
+
+with tabs[7]:  # YoY Comparison
+    st.header("Year over Year Comparison: 2024 vs 2025")
+    if st.session_state.get('fetch_complete', False) and not st.session_state.get('appointment_data', pd.DataFrame()).empty:
+        df = st.session_state.appointment_data.copy()
         # Add a descriptive introduction
         st.markdown("""
         <div style="background-color: white; padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
@@ -989,17 +1071,14 @@ if st.session_state.get('fetch_complete', False) and not st.session_state.get('a
                 st.warning("No data available for 2024-2025 comparison. Please ensure your date range includes data from both years.")
         else:
             st.error("Required date columns are missing in the appointment data.")
+    else:
+        display_empty_tab("Year over Year Comparison")
 
-    # — Calendar —
-    with tabs[8]:
-        render_calendar_tab(df)
+with tabs[8]:  # Calendar
+    render_calendar_tab(st.session_state.get('appointment_data', pd.DataFrame()))
 
-    # — MS Forms —
-    with tabs[9]:
-        render_forms_tab()
-
-else:
-    st.info("Select filters and click 'Fetch Data' to begin analysis")
+with tabs[9]:  # MS Forms
+    render_forms_tab()
 
 # Start webhook thread if realtime updates are enabled
 if st.session_state.get("realtime_updates", False):

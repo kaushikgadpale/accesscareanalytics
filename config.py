@@ -38,12 +38,21 @@ DATE_PRESETS = {
 
 # Theme Configuration
 THEME_CONFIG = {
-    "PRIMARY_COLOR": "#007BFF",
-    "SECONDARY_COLOR": "#D4AF37",
-    "BACKGROUND_COLOR": "#F8F9FA",
-    "TEXT_COLOR": "#333333",
-    "ACCENT_COLOR": "#4A90E2",
-    "WARNING_COLOR": "#FF6B6B"
+    'BACKGROUND_COLOR': '#f8f9fa',
+    'TEXT_COLOR': '#212529',
+    'PRIMARY_COLOR': '#2c3e50',
+    'SECONDARY_COLOR': '#3498db',
+    'ACCENT_COLOR': '#16a085',
+    'SUCCESS_COLOR': '#2ecc71',
+    'WARNING_COLOR': '#f39c12',
+    'DANGER_COLOR': '#e74c3c',
+    'LIGHT_COLOR': '#ecf0f1',
+    'DARK_COLOR': '#34495e',
+    'SIDEBAR_BG': '#ffffff',
+    'CARD_BG': '#ffffff',
+    'CARD_SHADOW': '0 2px 8px rgba(0,0,0,0.1)',
+    'BORDER_RADIUS': '10px',
+    'FONT_FAMILY': '"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
 }
 
 # Webhook Configuration
