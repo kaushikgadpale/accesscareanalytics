@@ -239,9 +239,14 @@ def add_header_with_logos(doc, client_logo_path=None):
         
         # Add Access Care logo (big_logo.png)
         try:
-            left_run.add_picture('big_logo.png', width=Inches(2.5))
-        except:
-            # If logo file isn't found, just add text instead
+            # Check if file exists and is valid
+            if os.path.exists('big_logo.png') and os.path.getsize('big_logo.png') > 100:
+                left_run.add_picture('big_logo.png', width=Inches(2.5))
+            else:
+                raise FileNotFoundError("Logo file not found or invalid")
+        except Exception as e:
+            # If logo file isn't found or valid, just add text instead
+            print(f"Error adding Access Care logo: {e}")
             left_run = left_para.add_run("Access Care Health, LLC")
             left_run.font.size = Pt(14)
             left_run.font.bold = True
@@ -253,8 +258,12 @@ def add_header_with_logos(doc, client_logo_path=None):
         
         if client_logo_path:
             try:
-                right_run = right_para.add_run()
-                right_run.add_picture(client_logo_path, width=Inches(2))
+                # Check if file exists and is valid
+                if os.path.exists(client_logo_path) and os.path.getsize(client_logo_path) > 100:
+                    right_run = right_para.add_run()
+                    right_run.add_picture(client_logo_path, width=Inches(2))
+                else:
+                    raise FileNotFoundError("Client logo file not found or invalid")
             except Exception as e:
                 # If there's an error with the client logo, just skip it
                 print(f"Error adding client logo: {e}")
@@ -563,12 +572,21 @@ def render_sow_creator():
         
         with col1:
             st.markdown("#### Header Preview:")
-            st.image("big_logo.png", width=200, caption="Access Care Logo in header")
+            try:
+                if os.path.exists("big_logo.png") and os.path.getsize("big_logo.png") > 100:
+                    st.image("big_logo.png", width=200, caption="Access Care Logo in header")
+                else:
+                    st.warning("Access Care logo file is missing or invalid. Please add a valid logo file to the project directory.")
+            except Exception as e:
+                st.warning(f"Could not display Access Care logo: {str(e)}")
         
         with col2:
             if st.session_state.client_logo:
                 st.markdown("#### Client Logo Preview:")
-                st.image(st.session_state.client_logo, width=200, caption="Client Logo in header")
+                try:
+                    st.image(st.session_state.client_logo, width=200, caption="Client Logo in header")
+                except Exception as e:
+                    st.warning(f"Could not display client logo: {str(e)}")
     
     # Preview and Generate buttons
     st.markdown("---")

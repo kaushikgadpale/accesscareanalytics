@@ -2,7 +2,7 @@ import streamlit as st
 import base64
 from config import THEME_CONFIG
 
-def get_svg_icon(icon_path, color=THEME_CONFIG['PRIMARY_COLOR'], width="24px", height="24px"):
+def get_svg_icon(icon_path, color=THEME_CONFIG['DARK_COLOR'], width="24px", height="24px"):
     """Generate an SVG icon with custom styling"""
     svg_content = f"""
     <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -11,7 +11,7 @@ def get_svg_icon(icon_path, color=THEME_CONFIG['PRIMARY_COLOR'], width="24px", h
     """
     return svg_content
 
-def get_icon_html(icon_name, color=THEME_CONFIG['PRIMARY_COLOR'], width="24px", height="24px", 
+def get_icon_html(icon_name, color=THEME_CONFIG['DARK_COLOR'], width="24px", height="24px", 
                  classes="", style=""):
     """Get HTML for a specific icon with styling"""
     icon_paths = {
@@ -78,7 +78,7 @@ def render_tab_bar(tabs, active_tab=None, callback=None):
     
     for i, (tab_id, tab_info) in enumerate(tabs.items()):
         is_active = active_tab == tab_id
-        tab_color = THEME_CONFIG['ACCENT_COLOR'] if is_active else THEME_CONFIG['PRIMARY_COLOR']
+        tab_color = THEME_CONFIG['ACCENT_COLOR'] if is_active else THEME_CONFIG['DARK_COLOR']
         
         # Create the tab with label and icon displayed in the button
         with cols[i]:
@@ -110,32 +110,12 @@ def render_tab_bar(tabs, active_tab=None, callback=None):
 def render_icon(icon_name, color=None, width="24px", height="24px", tooltip=""):
     """Render an icon with optional tooltip"""
     if color is None:
-        color = THEME_CONFIG['PRIMARY_COLOR']
+        color = THEME_CONFIG['DARK_COLOR']
         
     icon_html = get_icon_html(icon_name, color, width, height)
     
-    if tooltip:
-        # Add tooltip functionality with simple CSS
-        tooltip_html = f"""
-        <div class="icon-tooltip" style="position: relative; display: inline-block;">
-            {icon_html}
-            <span class="tooltip-text" style="visibility: hidden; background-color: {THEME_CONFIG['DARK_COLOR']}; 
-                color: {THEME_CONFIG['TEXT_COLOR']}; text-align: center; padding: 5px 10px; border-radius: 6px; 
-                position: absolute; z-index: 1; bottom: 125%; left: 50%; margin-left: -60px; opacity: 0; 
-                transition: opacity 0.3s; width: 120px;">
-                {tooltip}
-            </span>
-            <style>
-                .icon-tooltip:hover .tooltip-text {{
-                    visibility: visible;
-                    opacity: 1;
-                }}
-            </style>
-        </div>
-        """
-        st.markdown(tooltip_html, unsafe_allow_html=True)
-    else:
-        st.markdown(icon_html, unsafe_allow_html=True)
+    # Remove tooltip functionality as requested
+    st.markdown(icon_html, unsafe_allow_html=True)
 
 def render_empty_state(message, icon_name=None, action_button=None):
     """Render an empty state with icon and optional action button"""
@@ -196,7 +176,7 @@ def get_logo_base64():
     """Generate a simple logo with initials ACA in SVG format and return as base64"""
     svg_logo = """<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
         <rect width="100" height="100" rx="10" fill="#f8fafc"/>
-        <text x="50" y="60" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#3b82f6" text-anchor="middle">ACA</text>
+        <text x="50" y="60" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#1f2937" text-anchor="middle">ACA</text>
         <path d="M20 80 L80 80" stroke="#7c3aed" stroke-width="4" stroke-linecap="round"/>
         <path d="M30 70 L70 70" stroke="#6b7280" stroke-width="4" stroke-linecap="round"/>
     </svg>"""

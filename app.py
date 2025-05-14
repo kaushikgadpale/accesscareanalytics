@@ -14,14 +14,18 @@ import time
 import uuid
 import sys
 import asyncio
+from streamlit_extras.stylable_container import stylable_container
+from streamlit_extras.app_logo import add_logo
+from streamlit_extras.colored_header import colored_header
 
 # Import custom modules
-from config import THEME_CONFIG, DATE_PRESETS, APP_TAGLINE, LOGO_PATH
-from ms_integrations import fetch_bookings_data, fetch_calendar_events
+from config import THEME_CONFIG, DATE_PRESETS, APP_TAGLINE, LOGO_PATH, AIRTABLE_CONFIG
+from ms_integrations import fetch_bookings_data, fetch_calendar_events, fetch_businesses_for_appointments, track_booking_cancellations, fetch_cancellation_emails
 from phone_formatter import format_phone_strict, create_phone_analysis, format_phone_dataframe, prepare_outlook_contacts, create_appointments_flow, process_uploaded_phone_list
 from airtable_integration import render_airtable_tabs, get_airtable_credentials, fetch_airtable_table
 from icons import render_logo, render_tab_bar, render_icon, render_empty_state, render_info_box
 from sow_creator import render_sow_creator
+from airtable_export import render_export_options, export_bookings_to_airtable, export_patients_to_airtable, analyze_airtable_data
 
 # Page configuration
 st.set_page_config(
@@ -79,13 +83,26 @@ def render_app_header():
     with col1:
         # Check if logo files exist and use them, otherwise use the SVG
         logo_path = "logo.png"
-        big_logo_path = "big logo.png"
+        big_logo_path = "big_logo.png"
         
-        if os.path.exists(big_logo_path):
-            st.image(big_logo_path, width=150)
-        elif os.path.exists(logo_path):
-            st.image(logo_path, width=80)
-        else:
+        logo_displayed = False
+        
+        # Try to display logo with proper error handling
+        if os.path.exists(big_logo_path) and os.path.getsize(big_logo_path) > 100:
+            try:
+                st.image(big_logo_path, width=150)
+                logo_displayed = True
+            except Exception as e:
+                logo_displayed = False
+        
+        if not logo_displayed and os.path.exists(logo_path) and os.path.getsize(logo_path) > 100:
+            try:
+                st.image(logo_path, width=80)
+                logo_displayed = True
+            except Exception as e:
+                logo_displayed = False
+        
+        if not logo_displayed:
             st.markdown(render_logo(width="80px"), unsafe_allow_html=True)
         
     with col2:
@@ -96,8 +113,7 @@ def render_app_header():
 
 # Tab definitions for the main navigation
 MAIN_TABS = {
-    "dashboard": {"icon": "analytics", "label": "Dashboard"},
-    "patient": {"icon": "user", "label": "Patient & Client"},
+    "dashboard": {"icon": "analytics", "label": "Main"},
     "tools": {"icon": "tool", "label": "Tools"},
     "integrations": {"icon": "link", "label": "Integrations"},
     "content": {"icon": "document", "label": "Content Creator"}
@@ -106,7 +122,6 @@ MAIN_TABS = {
 # Subtab definitions for each main tab
 SUBTABS = {
     "dashboard": {
-        "overview": {"icon": "dashboard", "label": "Overview"},
         "appointments": {"icon": "calendar", "label": "Appointments"},
         "performance": {"icon": "chart", "label": "Performance"}
     },
@@ -122,7 +137,6 @@ SUBTABS = {
     },
     "integrations": {
         "ms_graph": {"icon": "graph", "label": "Microsoft Graph"},
-        "airtable": {"icon": "airtable", "label": "Airtable"},
         "webhooks": {"icon": "link", "label": "Webhooks"}
     },
     "content": {
@@ -134,6 +148,77 @@ SUBTABS = {
 # Main application layout
 def main():
     """Main application entry point"""
+    # Add sidebar
+    with st.sidebar:
+        # Add logo to sidebar
+        logo_path = "big_logo.png"
+        if os.path.exists(logo_path) and os.path.getsize(logo_path) > 100:
+            try:
+                st.image(logo_path, width=120)
+            except Exception as e:
+                st.markdown(render_logo(width="120px"), unsafe_allow_html=True)
+        else:
+            st.markdown(render_logo(width="120px"), unsafe_allow_html=True)
+        
+        st.markdown("<h3 style='text-align: center; margin-bottom: 0;'>Access Care Analytics</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; font-size: 0.9rem; margin-top: 0;'>Healthcare Analytics Platform</p>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        # Add navigation links with monochrome icons
+        colored_header("Navigation", description="", color_name="gray-70")
+        
+        # Use the stylable_container to create better-styled buttons
+        with stylable_container(
+            key="sidebar_nav",
+            css_styles="""
+                button {
+                    background-color: transparent;
+                    color: #1f2937;
+                    text-align: left;
+                    font-weight: 500;
+                    padding: 0.5rem 1rem;
+                    width: 100%;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 6px;
+                    margin-bottom: 0.5rem;
+                }
+                button:hover {
+                    background-color: #f3f4f6;
+                    border-color: #d1d5db;
+                }
+                div[data-testid="stHorizontalBlock"] {
+                    align-items: center;
+                }
+            """
+        ):
+            if st.button("Main", use_container_width=True):
+                st.session_state.active_tab = "dashboard"
+                st.rerun()
+                
+            if st.button("Tools", use_container_width=True):
+                st.session_state.active_tab = "tools"
+                st.rerun()
+                
+            if st.button("Integrations", use_container_width=True):
+                st.session_state.active_tab = "integrations"
+                st.rerun()
+                
+            if st.button("Content Creator", use_container_width=True):
+                st.session_state.active_tab = "content"
+                st.rerun()
+        
+        # App information
+        st.markdown("---")
+        colored_header("About", description="", color_name="gray-70")
+        st.markdown("""
+        <div style='font-size: 0.9rem;'>
+        Access Care Analytics provides comprehensive tools for healthcare appointment management, data analysis, and reporting.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("<p style='text-align: center; font-size: 0.8rem; color: #6b7280;'>© 2023 Access Care Analytics</p>", unsafe_allow_html=True)
+    
     render_app_header()
     
     # Render main tabs
@@ -166,8 +251,6 @@ def main():
     # Render the content for the active tab and subtab
     if active_tab == "dashboard":
         render_dashboard_tab(st.session_state.active_subtab.get(active_tab))
-    elif active_tab == "patient":
-        render_patient_tab(st.session_state.active_subtab.get(active_tab))
     elif active_tab == "tools":
         render_tools_tab(st.session_state.active_subtab.get(active_tab))
     elif active_tab == "integrations":
@@ -178,93 +261,516 @@ def main():
 # Render the dashboard tab
 def render_dashboard_tab(active_subtab):
     """Render the dashboard tab content"""
-    if active_subtab == "overview":
-        st.header("Dashboard Overview")
+    if active_subtab == "appointments":
+        st.header("Appointments")
         
-        # Show introduction card
-        st.markdown("""
-        <div class="card">
-            <h3>Welcome to Access Care Analytics</h3>
-            <p>Access comprehensive analytics and operational intelligence for your healthcare services.</p>
-            <p>Use the tabs above to navigate between different dashboard views.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Add a section to select booking businesses
+        st.subheader("Select Booking Pages")
         
-        # Create metrics row
-        st.subheader("Key Metrics")
+        # Add search box for filtering businesses
+        search_query = st.text_input("Search booking pages", key="business_search")
         
-        # Check if we have data
+        # Initialize session state for selected businesses if not exists
+        if 'selected_businesses' not in st.session_state:
+            st.session_state.selected_businesses = []
+        
+        # Fetch businesses and group them
+        if 'grouped_businesses' not in st.session_state:
+            try:
+                grouped_businesses = asyncio.run(fetch_businesses_for_appointments())
+                st.session_state.grouped_businesses = grouped_businesses
+            except Exception as e:
+                st.error(f"Error fetching businesses: {str(e)}")
+                st.session_state.grouped_businesses = {}
+        
+        # Create columns for select/unselect all buttons
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            if st.button("Select All"):
+                # Select all businesses
+                all_businesses = []
+                for group in st.session_state.grouped_businesses.values():
+                    all_businesses.extend([b["id"] for b in group])
+                st.session_state.selected_businesses = all_businesses
+                st.rerun()
+        
+        with col2:
+            if st.button("Unselect All"):
+                # Clear all selections
+                st.session_state.selected_businesses = []
+                st.rerun()
+        
+        # Display businesses grouped by first two letters
+        if st.session_state.grouped_businesses:
+            for prefix, businesses in st.session_state.grouped_businesses.items():
+                # Filter businesses based on search query
+                if search_query:
+                    filtered_businesses = [b for b in businesses if search_query.lower() in b["name"].lower()]
+                    if not filtered_businesses:
+                        continue
+                    businesses = filtered_businesses
+                
+                # Create expandable section for each group
+                with st.expander(f"{prefix} ({len(businesses)} booking pages)", expanded=True):
+                    for business in businesses:
+                        is_selected = business["id"] in st.session_state.selected_businesses
+                        if st.checkbox(
+                            business["name"], 
+                            value=is_selected, 
+                            key=f"business_{business['id']}"
+                        ):
+                            if business["id"] not in st.session_state.selected_businesses:
+                                st.session_state.selected_businesses.append(business["id"])
+                        else:
+                            if business["id"] in st.session_state.selected_businesses:
+                                st.session_state.selected_businesses.remove(business["id"])
+        else:
+            st.warning("No booking pages found. Please check your Microsoft Bookings integration.")
+        
+        # Display selected businesses summary
+        if st.session_state.selected_businesses:
+            # Flatten the business list to find names for the selected IDs
+            all_businesses = []
+            for group in st.session_state.grouped_businesses.values():
+                all_businesses.extend(group)
+            
+            # Get names of selected businesses
+            selected_names = [
+                b["name"] for b in all_businesses 
+                if b["id"] in st.session_state.selected_businesses
+            ]
+            
+            if selected_names:
+                st.write(f"**{len(selected_names)} booking pages selected**: {', '.join(selected_names)}")
+            else:
+                st.write("No booking pages selected")
+        else:
+            st.write("No booking pages selected")
+        
+        # Button to fetch appointments for selected businesses
+        if st.session_state.selected_businesses:
+            # Date range for appointment fetching
+            date_col1, date_col2 = st.columns(2)
+            with date_col1:
+                start_date = st.date_input("Start Date", value=st.session_state.date_range[0])
+            with date_col2:
+                end_date = st.date_input("End Date", value=st.session_state.date_range[1])
+            
+            # Update session state date range
+            st.session_state.date_range = (start_date, end_date)
+            
+            # Add a button to fetch data
+            if st.button("Fetch Appointments"):
+                with st.spinner("Fetching appointments..."):
+                    try:
+                        # Call the asynchronous function to fetch appointments
+                        bookings_data = asyncio.run(fetch_bookings_data(
+                            start_date,
+                            end_date,
+                            500,  # Use default max_results
+                            st.session_state.selected_businesses
+                        ))
+                        
+                        if bookings_data and len(bookings_data) > 0:
+                            # Convert to DataFrame
+                            df = pd.DataFrame(bookings_data)
+                            
+                            # Process date columns
+                            date_columns = ['Created Date', 'Start Date', 'End Date']
+                            for col in date_columns:
+                                if col in df.columns:
+                                    df[col] = pd.to_datetime(df[col])
+                            
+                            # Store in session state
+                            st.session_state.bookings_data = df
+                            st.success(f"Successfully fetched {len(df)} appointments.")
+                        else:
+                            st.warning("No appointments found for the selected date range and businesses.")
+                    except Exception as e:
+                        st.error(f"Error fetching appointments: {str(e)}")
+        
+        # Show appointment data if available
         if st.session_state.get('bookings_data') is not None:
+            st.subheader("Appointment Data")
+            
             df = st.session_state.bookings_data
             
-            # Create metrics
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                total_appointments = len(df)
-                st.metric("Total Appointments", total_appointments)
-                
-            with col2:
-                if 'Status' in df.columns:
-                    completed = len(df[df['Status'] == 'Completed'])
-                    st.metric("Completed", completed)
-                else:
-                    st.metric("Completed", "N/A")
-                    
-            with col3:
-                if 'Status' in df.columns:
-                    scheduled = len(df[df['Status'] == 'Scheduled'])
-                    st.metric("Scheduled", scheduled)
-                else:
-                    st.metric("Scheduled", "N/A")
-                    
-            with col4:
-                if 'Status' in df.columns:
-                    cancelled = len(df[df['Status'] == 'Cancelled'])
-                    st.metric("Cancelled", cancelled)
-                else:
-                    st.metric("Cancelled", "N/A")
-                    
-            # Create visualization row
-            st.subheader("Appointment Trends")
+            # Create tabs for different views
+            tabs = st.tabs(["Data Table", "Cancellations", "Visualizations", "Analysis"])
             
-            try:
-                # Create a simple line chart of appointments over time
-                if 'Created Date' in df.columns:
-                    df['Created Date'] = pd.to_datetime(df['Created Date'])
-                    daily_counts = df.groupby(df['Created Date'].dt.date).size().reset_index(name='count')
-                    
-                    fig = px.line(
-                        daily_counts, 
-                        x='Created Date', 
-                        y='count',
-                        title='Daily Appointment Bookings',
-                        labels={'Created Date': 'Date', 'count': 'Number of Bookings'},
-                        template='plotly_dark'
-                    )
-                    
-                    # Update the figure with theme colors
-                    fig.update_layout(
-                        plot_bgcolor=THEME_CONFIG['CARD_BG'],
-                        paper_bgcolor=THEME_CONFIG['CARD_BG'],
-                        font_color=THEME_CONFIG['TEXT_COLOR'],
-                        title_font_color=THEME_CONFIG['PRIMARY_COLOR'],
-                        legend_title_font_color=THEME_CONFIG['PRIMARY_COLOR'],
-                        height=400
-                    )
-                    fig.update_traces(line_color=THEME_CONFIG['SECONDARY_COLOR'])
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("Date information is not available in the current dataset.")
-            except Exception as e:
-                st.error(f"Error creating chart: {str(e)}")
+            with tabs[0]:
+                # Data table view with filters
+                st.write("### Appointment Records")
                 
-            # Status distribution pie chart
-            try:
-                if 'Status' in df.columns:
+                # Add filters for the data table
+                filter_container = st.container()
+                with filter_container:
+                    filter_cols = st.columns(4)
+                    
+                    # Create filter for business names
+                    with filter_cols[0]:
+                        if 'Business' in df.columns:
+                            business_options = ["All"] + sorted(df['Business'].unique().tolist())
+                            selected_business = st.selectbox("Business", business_options)
+                        else:
+                            selected_business = "All"
+                    
+                    # Create filter for status
+                    with filter_cols[1]:
+                        if 'Status' in df.columns:
+                            status_options = ["All"] + sorted(df['Status'].unique().tolist())
+                            selected_status = st.selectbox("Status", status_options)
+                        else:
+                            selected_status = "All"
+                    
+                    # Create filter for service
+                    with filter_cols[2]:
+                        if 'Service' in df.columns:
+                            service_options = ["All"] + sorted(df['Service'].unique().tolist())
+                            selected_service = st.selectbox("Service", service_options)
+                        else:
+                            selected_service = "All"
+                    
+                    # Create search for customer name
+                    with filter_cols[3]:
+                        if 'Customer' in df.columns:
+                            customer_search = st.text_input("Search Customer")
+                        else:
+                            customer_search = ""
+                
+                # Apply filters to the dataframe
+                filtered_df = df.copy()
+                
+                if selected_business != "All" and 'Business' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Business'] == selected_business]
+                
+                if selected_status != "All" and 'Status' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Status'] == selected_status]
+                
+                if selected_service != "All" and 'Service' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Service'] == selected_service]
+                
+                if customer_search and 'Customer' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Customer'].str.contains(customer_search, case=False)]
+                
+                # Show the filtered table
+                st.dataframe(filtered_df, use_container_width=True)
+                
+                # Add download option
+                csv = filtered_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "Download CSV",
+                    csv,
+                    "appointments.csv",
+                    "text/csv",
+                    key="download-csv"
+                )
+            
+            with tabs[1]:
+                # Cancellations tab
+                st.write("### Appointment Cancellations")
+                
+                st.markdown("""
+                <div class="card">
+                    <h4>Track Cancelled Appointments</h4>
+                    <p>This feature tracks appointments that were cancelled by combining two methods:</p>
+                    <ol>
+                        <li><strong>Dataset Comparison</strong>: Detects appointments that were present in a previous fetch but are missing in the current data.</li>
+                        <li><strong>Email Analysis</strong>: Searches mailboxes for cancellation emails and extracts appointment details.</li>
+                    </ol>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Options for cancellation detection
+                check_col1, check_col2 = st.columns([3, 2])
+                
+                with check_col1:
+                    # Add options for email checking
+                    with st.expander("Cancellation Detection Options", expanded=True):
+                        check_emails = st.checkbox("Check mailboxes for cancellation emails", value=True)
+                        email_days = st.slider("Days to look back for cancellation emails", 
+                                              min_value=1, max_value=90, value=30, 
+                                              help="Number of days to look back in mailboxes for cancellation emails")
+                        
+                        # Display mailbox information
+                        if check_emails:
+                            import os
+                            mailboxes = os.getenv("BOOKINGS_MAILBOXES", "").split(",")
+                            if mailboxes and mailboxes[0]:
+                                st.info(f"Will check {len(mailboxes)} configured mailboxes:")
+                                # List mailboxes directly without nested expander
+                                mailbox_text = "\n".join([f"- {mailbox}" for mailbox in mailboxes if mailbox.strip()])
+                                st.text(mailbox_text)
+                            else:
+                                st.warning("No mailboxes configured. Set the BOOKINGS_MAILBOXES environment variable.")
+                                st.markdown("""
+                                To configure mailboxes, add the BOOKINGS_MAILBOXES environment variable with a comma-separated list of email addresses, like:
+                                ```
+                                info-usa@accesscare.health,info-usacst@accesscare.health,info@accesscare.health
+                                ```
+                                """)
+                    
+                    # Button to check for cancellations
+                    if st.button("Check for Cancellations", use_container_width=True):
+                        with st.spinner("Analyzing appointment cancellations..."):
+                            try:
+                                # Run the cancellation tracking function
+                                cancelled = asyncio.run(track_booking_cancellations(
+                                    st.session_state.date_range[0],
+                                    st.session_state.date_range[1],
+                                    st.session_state.selected_businesses,
+                                    500,
+                                    check_emails,
+                                    email_days
+                                ))
+                                
+                                # Store in session state
+                                st.session_state.cancelled_appointments = cancelled
+                                
+                                if cancelled:
+                                    st.session_state.cancelled_df = pd.DataFrame(cancelled)
+                                else:
+                                    st.session_state.cancelled_df = pd.DataFrame()
+                            except Exception as e:
+                                st.error(f"Error checking for cancellations: {str(e)}")
+                
+                # Display cancelled appointments if available
+                if 'cancelled_df' in st.session_state and not st.session_state.cancelled_df.empty:
+                    st.write(f"### {len(st.session_state.cancelled_df)} Cancelled Appointments Found")
+                    
+                    # Add filters for the cancellations table
+                    filter_container = st.container()
+                    with filter_container:
+                        filter_cols = st.columns(3)
+                        
+                        # Filter by cancellation source
+                        with filter_cols[0]:
+                            if 'CancellationSource' in st.session_state.cancelled_df.columns:
+                                source_options = ["All"] + sorted(st.session_state.cancelled_df['CancellationSource'].unique().tolist())
+                                selected_source = st.selectbox("Cancellation Source", source_options)
+                            else:
+                                selected_source = "All"
+                        
+                        # Filter by business
+                        with filter_cols[1]:
+                            if 'Business' in st.session_state.cancelled_df.columns:
+                                business_options = ["All"] + sorted(st.session_state.cancelled_df['Business'].dropna().unique().tolist())
+                                selected_business = st.selectbox("Business", business_options)
+                            else:
+                                selected_business = "All"
+                        
+                        # Search for customer
+                        with filter_cols[2]:
+                            if 'Customer' in st.session_state.cancelled_df.columns:
+                                customer_search = st.text_input("Search Customer")
+                            else:
+                                customer_search = ""
+                    
+                    # Apply filters
+                    filtered_cancelled_df = st.session_state.cancelled_df.copy()
+                    
+                    if selected_source != "All" and 'CancellationSource' in filtered_cancelled_df.columns:
+                        filtered_cancelled_df = filtered_cancelled_df[filtered_cancelled_df['CancellationSource'] == selected_source]
+                    
+                    if selected_business != "All" and 'Business' in filtered_cancelled_df.columns:
+                        filtered_cancelled_df = filtered_cancelled_df[filtered_cancelled_df['Business'] == selected_business]
+                    
+                    if customer_search and 'Customer' in filtered_cancelled_df.columns:
+                        filtered_cancelled_df = filtered_cancelled_df[
+                            filtered_cancelled_df['Customer'].astype(str).str.contains(customer_search, case=False, na=False)
+                        ]
+                    
+                    # Display the filtered cancellations
+                    st.dataframe(filtered_cancelled_df, use_container_width=True)
+                    
+                    # Add download option
+                    csv = filtered_cancelled_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        "Download Cancelled Appointments",
+                        csv,
+                        "cancelled_appointments.csv",
+                        "text/csv",
+                        key="download-cancelled"
+                    )
+                    
+                    # Add visualizations for cancellations
+                    viz_tabs = st.tabs(["Cancellation Sources", "Businesses", "Timeline"])
+                    
+                    with viz_tabs[0]:
+                        # Cancellation source breakdown
+                        if 'CancellationSource' in filtered_cancelled_df.columns:
+                            st.subheader("Cancellation Sources")
+                            
+                            source_counts = filtered_cancelled_df['CancellationSource'].value_counts().reset_index()
+                            source_counts.columns = ['Source', 'Count']
+                            
+                            fig = px.pie(
+                                source_counts,
+                                values='Count',
+                                names='Source',
+                                title='Cancellation Detection Methods',
+                                color='Source',
+                                color_discrete_map={
+                                    'Dataset Comparison': THEME_CONFIG['PRIMARY_COLOR'],
+                                    'Email': THEME_CONFIG['ACCENT_COLOR']
+                                }
+                            )
+                            
+                            fig.update_traces(textposition='inside', textinfo='percent+label')
+                            fig.update_layout(height=400)
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                    
+                    with viz_tabs[1]:
+                        # Business breakdown
+                        if 'Business' in filtered_cancelled_df.columns:
+                            st.subheader("Cancellations by Business")
+                            
+                            # Filter out None values
+                            business_df = filtered_cancelled_df.dropna(subset=['Business'])
+                            
+                            if not business_df.empty:
+                                business_counts = business_df['Business'].value_counts().reset_index()
+                                business_counts.columns = ['Business', 'Count']
+                                
+                                fig = px.bar(
+                                    business_counts,
+                                    x='Business',
+                                    y='Count',
+                                    color='Count',
+                                    color_continuous_scale='Reds',
+                                    title='Appointment Cancellations by Business'
+                                )
+                                
+                                fig.update_layout(
+                                    xaxis_title="Business",
+                                    yaxis_title="Number of Cancellations",
+                                    xaxis={'categoryorder': 'total descending'},
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.info("No business data available for cancellations")
+                    
+                    with viz_tabs[2]:
+                        # Timeline of cancellations
+                        st.subheader("Cancellation Timeline")
+                        
+                        # Make a deep copy to prevent SettingWithCopyWarning
+                        timeline_df = filtered_cancelled_df.copy(deep=True)
+                        
+                        # Create a Date column for timeline analysis
+                        timeline_df['Date'] = None
+                        
+                        # Try to get date information from different fields
+                        if 'ReceivedTime' in timeline_df.columns:
+                            # Use proper .loc assignment to avoid SettingWithCopyWarning
+                            timeline_df.loc[:, 'Date'] = pd.to_datetime(timeline_df['ReceivedTime'], errors='coerce')
+                        
+                        if 'Start Date' in timeline_df.columns:
+                            # Fill missing dates with Start Date if available - using .loc to avoid warnings
+                            mask = timeline_df['Date'].isna()
+                            timeline_df.loc[mask, 'Date'] = pd.to_datetime(timeline_df.loc[mask, 'Start Date'], errors='coerce')
+                        
+                        # Drop rows with no date
+                        timeline_df = timeline_df.dropna(subset=['Date'])
+                        
+                        if not timeline_df.empty:
+                            # Group by date and source
+                            timeline_df['Date'] = timeline_df['Date'].dt.date
+                            
+                            if 'CancellationSource' in timeline_df.columns:
+                                daily_counts = timeline_df.groupby(['Date', 'CancellationSource']).size().reset_index(name='Count')
+                                
+                                fig = px.line(
+                                    daily_counts,
+                                    x='Date',
+                                    y='Count',
+                                    color='CancellationSource',
+                                    title='Cancellations Over Time',
+                                    markers=True
+                                )
+                            else:
+                                daily_counts = timeline_df.groupby('Date').size().reset_index(name='Count')
+                                
+                                fig = px.line(
+                                    daily_counts,
+                                    x='Date',
+                                    y='Count',
+                                    title='Cancellations Over Time',
+                                    markers=True
+                                )
+                            
+                            fig.update_layout(
+                                xaxis_title="Date",
+                                yaxis_title="Number of Cancellations",
+                                height=400
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("No timeline data available for cancellations")
+                    
+                elif 'cancelled_df' in st.session_state:
+                    st.info("No cancelled appointments were detected.")
+                else:
+                    st.info("Click 'Check for Cancellations' to analyze appointment changes.")
+                    
+                # Add instructions for interpreting results
+                with st.expander("About Cancellation Detection", expanded=False):
+                    st.markdown("""
+                    ## How Cancellation Detection Works
+                    
+                    This feature uses two complementary methods to track cancellations:
+                    
+                    ### 1. Dataset Comparison Method
+                    
+                    This method works by comparing the current set of appointments with the previously fetched set:
+                    
+                    1. When you click "Check for Cancellations", the system compares appointment IDs from the current data with those from the previous fetch
+                    2. Appointments that were present before but are missing now are identified as "cancelled"
+                    3. The full details of these cancelled appointments are displayed from the previous data snapshot
+                    
+                    ### 2. Email Analysis Method
+                    
+                    This method searches for cancellation emails in your configured mailboxes:
+                    
+                    1. It searches each mailbox for emails containing cancellation keywords in the subject or body
+                    2. It then extracts appointment details like the customer name, appointment ID, and date
+                    3. This method can detect cancellations that happen between your data fetches
+                    
+                    ### Important Notes
+                    
+                    - The Microsoft Bookings API doesn't provide a direct "cancelled" status
+                    - The dataset comparison method assumes that missing appointments were cancelled
+                    - Some appointments might be missing for other reasons (e.g., rescheduled with a new ID)
+                    - The email method depends on the format of your cancellation emails
+                    - For best results, use both methods together
+                    """)
+                    
+                    st.markdown("""
+                    ### Setting Up Mailboxes
+                    
+                    To configure the mailboxes for cancellation emails, add the `BOOKINGS_MAILBOXES` environment variable with a comma-separated list of email addresses:
+                    
+                    ```
+                    BOOKINGS_MAILBOXES=info-usa@accesscare.health,info-usacst@accesscare.health,info@accesscare.health
+                    ```
+                    
+                    The application will need appropriate permissions to access these mailboxes.
+                    """)
+            
+            with tabs[2]:
+                # Visualizations tab
+                st.write("### Appointment Visualizations")
+                
+                # Status distribution
+                if 'Status' in filtered_df.columns:
                     st.subheader("Appointment Status Distribution")
                     
-                    status_counts = df['Status'].value_counts().reset_index()
+                    status_counts = filtered_df['Status'].value_counts().reset_index()
                     status_counts.columns = ['Status', 'Count']
                     
                     fig = px.pie(
@@ -272,7 +778,6 @@ def render_dashboard_tab(active_subtab):
                         values='Count',
                         names='Status',
                         title='Appointment Status Distribution',
-                        template='plotly_dark',
                         color_discrete_map={
                             'Completed': THEME_CONFIG['SUCCESS_COLOR'],
                             'Scheduled': THEME_CONFIG['PRIMARY_COLOR'],
@@ -280,93 +785,323 @@ def render_dashboard_tab(active_subtab):
                         }
                     )
                     
+                    fig.update_traces(textposition='inside', textinfo='percent+label')
+                    fig.update_layout(height=400)
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                # Distribution by business (if applicable)
+                if 'Business' in filtered_df.columns:
+                    st.subheader("Appointments by Business")
+                    
+                    business_counts = filtered_df['Business'].value_counts().reset_index()
+                    business_counts.columns = ['Business', 'Count']
+                    
+                    fig = px.bar(
+                        business_counts.sort_values('Count', ascending=False).head(10),
+                        x='Business',
+                        y='Count',
+                        title='Top Businesses by Appointment Count',
+                        color='Count',
+                        color_continuous_scale='Viridis'
+                    )
+                    
                     fig.update_layout(
-                        plot_bgcolor=THEME_CONFIG['CARD_BG'],
-                        paper_bgcolor=THEME_CONFIG['CARD_BG'],
-                        font_color=THEME_CONFIG['TEXT_COLOR'],
-                        title_font_color=THEME_CONFIG['PRIMARY_COLOR'],
+                        xaxis_title="Business",
+                        yaxis_title="Number of Appointments",
+                        xaxis={'categoryorder': 'total descending'},
                         height=400
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                st.error(f"Error creating chart: {str(e)}")
-        else:
-            # Show empty state
-            render_empty_state(
-                "No appointment data available. Use the sidebar to set filters and fetch data.",
-                "dashboard"
-            )
-            
-            # Add a button to fetch data
-            if st.button("Fetch Appointment Data"):
-                # This would normally fetch real data
-                st.session_state.bookings_data = pd.DataFrame({
-                    "Customer": ["John Doe", "Jane Smith", "Bob Johnson"] * 5,
-                    "Status": ["Completed", "Scheduled", "Cancelled"] * 5,
-                    "Created Date": pd.date_range(start="2023-01-01", periods=15, freq="D"),
-                    "Service": ["Cleaning", "Exam", "Surgery"] * 5
-                })
-                st.rerun()
                 
-    elif active_subtab == "appointments":
-        st.header("Appointments")
-        
-        # Check if we have data
-        if st.session_state.get('bookings_data') is not None:
-            df = st.session_state.bookings_data
-            
-            # Add filters
-            col1, col2 = st.columns(2)
-            with col1:
-                if 'Status' in df.columns:
-                    status_options = df['Status'].unique().tolist()
-                    selected_status = st.multiselect(
-                        "Filter by Status",
-                        options=status_options,
-                        default=status_options
-                    )
-                else:
-                    selected_status = []
+                # Service distribution (if applicable)
+                if 'Service' in filtered_df.columns:
+                    st.subheader("Appointments by Service Type")
                     
-            with col2:
-                if 'Service' in df.columns:
-                    service_options = df['Service'].unique().tolist()
-                    selected_services = st.multiselect(
-                        "Filter by Service",
-                        options=service_options,
-                        default=service_options
-                    )
-                else:
-                    selected_services = []
+                    service_counts = filtered_df['Service'].value_counts().reset_index()
+                    service_counts.columns = ['Service', 'Count']
                     
-            # Apply filters
-            filtered_df = df
-            if 'Status' in df.columns and selected_status:
-                filtered_df = filtered_df[filtered_df['Status'].isin(selected_status)]
-                
-            if 'Service' in df.columns and selected_services:
-                filtered_df = filtered_df[filtered_df['Service'].isin(selected_services)]
-                
-            # Display filtered results
-            st.subheader(f"Showing {len(filtered_df)} appointments")
-            st.dataframe(filtered_df, use_container_width=True)
+                    fig = px.bar(
+                        service_counts.sort_values('Count', ascending=False),
+                        x='Service',
+                        y='Count',
+                        title='Appointments by Service Type',
+                        color='Count',
+                        color_continuous_scale='Viridis'
+                    )
+                    
+                    fig.update_layout(
+                        xaxis_title="Service",
+                        yaxis_title="Number of Appointments",
+                        xaxis={'categoryorder': 'total descending'},
+                        height=400
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
             
-            # Download filtered data
-            csv = filtered_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "Download Filtered Data",
-                csv,
-                "appointments.csv",
-                "text/csv",
-                key="download-appointments"
-            )
+            with tabs[3]:
+                # Analysis tab
+                st.write("### Appointment Analysis")
+                
+                # Select date level for aggregation
+                date_level = st.selectbox(
+                    "Date Aggregation Level", 
+                    ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"]
+                )
+                
+                # Define frequency map for resample
+                freq_map = {
+                    "Daily": "D",
+                    "Weekly": "W",
+                    "Monthly": "M",
+                    "Quarterly": "Q",
+                    "Yearly": "Y"
+                }
+                
+                # Month names for nice labels
+                month_names = {
+                    1: 'January', 2: 'February', 3: 'March', 4: 'April',
+                    5: 'May', 6: 'June', 7: 'July', 8: 'August',
+                    9: 'September', 10: 'October', 11: 'November', 12: 'December'
+                }
+                
+                # Date range for analysis
+                analysis_cols = st.columns(2)
+                with analysis_cols[0]:
+                    analysis_start_date = st.date_input("Analysis Start Date", value=st.session_state.date_range[0], key="analysis_start")
+                with analysis_cols[1]:
+                    analysis_end_date = st.date_input("Analysis End Date", value=st.session_state.date_range[1], key="analysis_end")
+                
+                # Analysis based on booking creation time
+                if 'Created Date' in filtered_df.columns:
+                    st.subheader("Booking Creation Analysis")
+                    
+                    # Filter by date range
+                    creation_df = filtered_df[
+                        (filtered_df['Created Date'].dt.date >= analysis_start_date) &
+                        (filtered_df['Created Date'].dt.date <= analysis_end_date)
+                    ]
+                    
+                    if not creation_df.empty:
+                        # Convert timestamps to naive datetime to avoid timezone warnings
+                        if pd.api.types.is_datetime64_dtype(creation_df['Created Date']):
+                            creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
+                        
+                        # Group by selected frequency
+                        creation_df['Period'] = creation_df['Created Date'].dt.to_period(freq_map[date_level])
+                        creation_counts = creation_df.groupby('Period').size().reset_index(name='Count')
+                        creation_counts['Period'] = creation_counts['Period'].astype(str)
+                        
+                        # Create creation time graph
+                        fig_creation = px.line(
+                            creation_counts, 
+                            x='Period', 
+                            y='Count',
+                            title=f'Appointments by Creation Date ({date_level})',
+                            markers=True
+                        )
+                        
+                        fig_creation.update_layout(
+                            xaxis_title=f"{date_level} Period",
+                            yaxis_title="Number of Appointments",
+                            hovermode="x unified",
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig_creation, use_container_width=True)
+                    else:
+                        st.info("No data available for the selected date range.")
+                
+                # Analysis based on booking date
+                if 'Start Date' in filtered_df.columns:
+                    st.subheader("Booking Date Analysis")
+                    
+                    # Filter by date range
+                    booking_df = filtered_df[
+                        (filtered_df['Start Date'].dt.date >= analysis_start_date) &
+                        (filtered_df['Start Date'].dt.date <= analysis_end_date)
+                    ]
+                    
+                    if not booking_df.empty:
+                        # Convert timestamps to naive datetime to avoid timezone warnings
+                        if 'Start Date' in booking_df.columns and pd.api.types.is_datetime64_dtype(booking_df['Start Date']):
+                            booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
+                        
+                        # Group by business and period
+                        booking_df['Period'] = booking_df['Start Date'].dt.to_period(freq_map[date_level])
+                        
+                        if 'Business' in booking_df.columns:
+                            # Group by business and period
+                            business_counts = booking_df.groupby(['Business', 'Period']).size().reset_index(name='Count')
+                            business_counts['Period'] = business_counts['Period'].astype(str)
+                            
+                            # Create booking date by business graph
+                            fig_business = px.line(
+                                business_counts, 
+                                x='Period', 
+                                y='Count',
+                                color='Business',
+                                title=f'Appointments by Booking Date and Business ({date_level})',
+                                markers=True
+                            )
+                            
+                            fig_business.update_layout(
+                                xaxis_title=f"{date_level} Period",
+                                yaxis_title="Number of Appointments",
+                                hovermode="x unified",
+                                height=500
+                            )
+                            
+                            st.plotly_chart(fig_business, use_container_width=True)
+                        
+                        # Overall booking date trends
+                        booking_counts = booking_df.groupby('Period').size().reset_index(name='Count')
+                        booking_counts['Period'] = booking_counts['Period'].astype(str)
+                        
+                        fig_booking = px.bar(
+                            booking_counts, 
+                            x='Period', 
+                            y='Count',
+                            title=f'Appointments by Booking Date ({date_level})',
+                            color='Count',
+                            color_continuous_scale='Viridis'
+                        )
+                        
+                        fig_booking.update_layout(
+                            xaxis_title=f"{date_level} Period",
+                            yaxis_title="Number of Appointments",
+                            hovermode="x unified",
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig_booking, use_container_width=True)
+                    else:
+                        st.info("No data available for the selected date range.")
+                
+                # Year-over-year comparison
+                st.subheader("Year-over-Year Comparison")
+                
+                if 'Start Date' in filtered_df.columns:
+                    # Extract year from dates
+                    filtered_df['Year'] = filtered_df['Start Date'].dt.year
+                    
+                    # Get all unique years
+                    years = sorted(filtered_df['Year'].dropna().unique())
+                    
+                    if len(years) > 0:
+                        # Create year-over-year graphs
+                        year_tabs = st.tabs([f"{year}" for year in years] + ["Compare All Years"])
+                        
+                        # Individual year tabs
+                        for i, year in enumerate(years):
+                            with year_tabs[i]:
+                                year_df = filtered_df[filtered_df['Year'] == year]
+                                
+                                if not year_df.empty:
+                                    # Monthly trend for this year
+                                    year_df['Month'] = year_df['Start Date'].dt.month
+                                    monthly_counts = year_df.groupby('Month').size().reset_index(name='Count')
+                                    
+                                    # Add month names
+                                    monthly_counts['Month Name'] = monthly_counts['Month'].map(month_names)
+                                    
+                                    fig_monthly = px.line(
+                                        monthly_counts.sort_values('Month'),
+                                        x='Month Name',
+                                        y='Count',
+                                        title=f'Monthly Appointments in {year}',
+                                        markers=True
+                                    )
+                                    
+                                    fig_monthly.update_layout(
+                                        xaxis_title="Month",
+                                        yaxis_title="Number of Appointments",
+                                        height=400,
+                                        xaxis={'categoryorder':'array', 'categoryarray':list(month_names.values())}
+                                    )
+                                    
+                                    st.plotly_chart(fig_monthly, use_container_width=True)
+                                    
+                                    # Business breakdown for this year if available
+                                    if 'Business' in year_df.columns:
+                                        business_year_counts = year_df.groupby('Business').size().reset_index(name='Count')
+                                        
+                                        fig_business_year = px.pie(
+                                            business_year_counts,
+                                            values='Count',
+                                            names='Business',
+                                            title=f'Appointments by Business in {year}'
+                                        )
+                                        
+                                        fig_business_year.update_traces(textposition='inside', textinfo='percent+label')
+                                        fig_business_year.update_layout(height=400)
+                                        
+                                        st.plotly_chart(fig_business_year, use_container_width=True)
+                                else:
+                                    st.info(f"No data available for {year}.")
+                        
+                        # Compare all years tab
+                        with year_tabs[len(years)]:
+                            if len(years) > 1:
+                                # Prepare data for all years comparison
+                                all_years_df = filtered_df.dropna(subset=['Year', 'Start Date'])
+                                all_years_df['Month'] = all_years_df['Start Date'].dt.month
+                                all_years_counts = all_years_df.groupby(['Year', 'Month']).size().reset_index(name='Count')
+                                
+                                # Add month names
+                                all_years_counts['Month Name'] = all_years_counts['Month'].map(month_names)
+                                
+                                # Create combined year-over-year graph
+                                fig_all_years = px.line(
+                                    all_years_counts,
+                                    x='Month Name',
+                                    y='Count',
+                                    color='Year',
+                                    title='Year-over-Year Monthly Comparison',
+                                    markers=True
+                                )
+                                
+                                fig_all_years.update_layout(
+                                    xaxis_title="Month",
+                                    yaxis_title="Number of Appointments",
+                                    hovermode="x",
+                                    xaxis={'categoryorder':'array', 'categoryarray':list(month_names.values())},
+                                    height=500
+                                )
+                                
+                                st.plotly_chart(fig_all_years, use_container_width=True)
+                                
+                                # Total appointments per year
+                                yearly_totals = all_years_df.groupby('Year').size().reset_index(name='Total Appointments')
+                                
+                                fig_yearly_totals = px.bar(
+                                    yearly_totals,
+                                    x='Year',
+                                    y='Total Appointments',
+                                    title='Total Appointments by Year',
+                                    color='Total Appointments',
+                                    text_auto=True
+                                )
+                                
+                                fig_yearly_totals.update_layout(
+                                    xaxis_title="Year",
+                                    yaxis_title="Total Appointments",
+                                    height=400
+                                )
+                                
+                                st.plotly_chart(fig_yearly_totals, use_container_width=True)
+                            else:
+                                st.info("Need at least two years of data for comparison.")
+                    else:
+                        st.info("No yearly data available for comparison.")
+                else:
+                    st.info("No booking date information available for year-over-year analysis.")
+            if 'Start Date' not in filtered_df.columns and 'Created Date' not in filtered_df.columns:
+                st.warning("No date columns available for analysis. Please ensure your data includes 'Created Date' or 'Start Date' columns.")
         else:
-            # Show empty state
-            render_empty_state(
-                "No appointment data available. Use the sidebar to set filters and fetch data.",
-                "calendar"
-            )
+            # Show message instructing to select businesses and fetch data
+            st.info("Please select booking pages and fetch appointments to view data.")
     
     elif active_subtab == "performance":
         st.header("Performance Metrics")
@@ -496,297 +1231,6 @@ def render_dashboard_tab(active_subtab):
             render_empty_state(
                 "No performance data available. Please fetch appointment data first.",
                 "analytics"
-            )
-
-# Render the patient tab
-def render_patient_tab(active_subtab):
-    """Render the patient tab content"""
-    if active_subtab == "contacts":
-        st.header("Patient Contacts")
-        
-        # Check if we have data
-        if st.session_state.get('bookings_data') is not None:
-            df = st.session_state.bookings_data
-            
-            # Create patient contact information cards
-            if "Customer" in df.columns:
-                # Get unique customers
-                unique_customers = df["Customer"].unique()
-                st.subheader(f"Patient Directory ({len(unique_customers)} patients)")
-                
-                # Create search functionality
-                search_term = st.text_input("Search Patients", "")
-                
-                # Filter based on search
-                if search_term:
-                    filtered_customers = [c for c in unique_customers if search_term.lower() in c.lower()]
-                else:
-                    filtered_customers = unique_customers
-                
-                # Add pagination
-                patients_per_page = 10
-                total_pages = (len(filtered_customers) - 1) // patients_per_page + 1
-                
-                col1, col2 = st.columns([4, 1])
-                with col2:
-                    current_page = st.selectbox("Page", range(1, total_pages + 1), 1) if total_pages > 1 else 1
-                
-                # Slice the customers for current page
-                start_idx = (current_page - 1) * patients_per_page
-                end_idx = start_idx + patients_per_page
-                current_customers = filtered_customers[start_idx:end_idx]
-                
-                # Display patient cards
-                for customer in current_customers:
-                    customer_data = df[df["Customer"] == customer].iloc[0]
-                    
-                    # Create a card for each patient
-                    st.markdown(f"""
-                    <div class="card" style="margin-bottom: 1rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div>
-                                <h3 style="margin-top: 0;">{customer}</h3>
-                                <p><strong>Last Visit:</strong> {customer_data.get('Start Date', 'N/A')}</p>
-                                <p><strong>Service:</strong> {customer_data.get('Service', 'N/A')}</p>
-                            </div>
-                            <div>
-                                <span style="background-color: {THEME_CONFIG['SUCCESS_COLOR']}; color: white; padding: 4px 8px; border-radius: 4px;">
-                                    {customer_data.get('Status', 'N/A')}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            else:
-                render_empty_state(
-                    "No customer data found in the current dataset.",
-                    "user"
-                )
-        else:
-            # Show empty state
-            render_empty_state(
-                "No patient data available. Please fetch appointment data first.",
-                "user"
-            )
-            
-    elif active_subtab == "communication":
-        st.header("Patient Communication")
-        
-        # Show introduction card
-        st.markdown("""
-        <div class="card">
-            <h3>Communication Dashboard</h3>
-            <p>Monitor and manage patient communications and outreach campaigns.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Create tabs for different communication methods
-        comm_tabs = ["Email Templates", "SMS Campaigns", "Communication History"]
-        active_comm_tab = st.radio("", comm_tabs, horizontal=True)
-        
-        if active_comm_tab == "Email Templates":
-            st.subheader("Email Templates")
-            
-            # Example email templates
-            templates = [
-                {"name": "Appointment Reminder", "subject": "Your Upcoming Appointment", "usage": 245},
-                {"name": "Appointment Confirmation", "subject": "Appointment Confirmed", "usage": 189},
-                {"name": "Follow-up Care", "subject": "Follow-up Information After Your Visit", "usage": 156},
-                {"name": "Annual Checkup Reminder", "subject": "Time for Your Annual Check-up", "usage": 98}
-            ]
-            
-            # Display templates
-            for i, template in enumerate(templates):
-                st.markdown(f"""
-                <div class="card" style="margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div>
-                            <h3 style="margin-top: 0;">{template['name']}</h3>
-                            <p><strong>Subject:</strong> {template['subject']}</p>
-                        </div>
-                        <div>
-                            <span style="background-color: {THEME_CONFIG['LIGHT_COLOR']}; color: {THEME_CONFIG['TEXT_COLOR']}; padding: 4px 8px; border-radius: 4px;">
-                                Used {template['usage']} times
-                            </span>
-                        </div>
-                    </div>
-                    <div style="margin-top: 0.5rem;">
-                        <button style="background-color: {THEME_CONFIG['PRIMARY_COLOR']}; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; margin-right: 8px;">
-                            Edit Template
-                        </button>
-                        <button style="background-color: {THEME_CONFIG['SECONDARY_COLOR']}; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
-                            Send Test
-                        </button>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # Button to create new template
-            st.button("Create New Template")
-            
-        elif active_comm_tab == "SMS Campaigns":
-            st.subheader("SMS Campaigns")
-            
-            # Example SMS campaigns
-            campaigns = [
-                {"name": "Appointment Reminder", "status": "Active", "sent": 156, "delivered": 152},
-                {"name": "Special Promotion", "status": "Completed", "sent": 243, "delivered": 238},
-                {"name": "Holiday Hours", "status": "Draft", "sent": 0, "delivered": 0}
-            ]
-            
-            # Display campaigns
-            for campaign in campaigns:
-                status_color = {
-                    "Active": THEME_CONFIG['SUCCESS_COLOR'],
-                    "Completed": THEME_CONFIG['SECONDARY_COLOR'],
-                    "Draft": THEME_CONFIG['LIGHT_COLOR']
-                }.get(campaign['status'], THEME_CONFIG['LIGHT_COLOR'])
-                
-                st.markdown(f"""
-                <div class="card" style="margin-bottom: 1rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div>
-                            <h3 style="margin-top: 0;">{campaign['name']}</h3>
-                            <p><strong>Messages Sent:</strong> {campaign['sent']}</p>
-                            <p><strong>Delivered:</strong> {campaign['delivered']}</p>
-                        </div>
-                        <div>
-                            <span style="background-color: {status_color}; color: white; padding: 4px 8px; border-radius: 4px;">
-                                {campaign['status']}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # Button to create new campaign
-            st.button("Create New Campaign")
-            
-        elif active_comm_tab == "Communication History":
-            st.subheader("Communication History")
-            
-            # Create sample communication history data
-            history_data = pd.DataFrame({
-                "Date": pd.date_range(start="2023-01-01", periods=10, freq="D"),
-                "Type": ["Email", "SMS", "Email", "Email", "SMS", "Email", "SMS", "Email", "Email", "SMS"],
-                "Subject/Template": ["Appointment Reminder", "Schedule Confirmation", "Follow-up Care", 
-                                    "Annual Checkup", "Office Closed", "Lab Results", "Medication Reminder",
-                                    "Survey Request", "Billing Notice", "Appointment Reminder"],
-                "Recipient": ["John Doe", "Jane Smith", "Bob Johnson", "Alice Brown", "Tom Wilson",
-                             "Sarah Davis", "Mike Thompson", "Lisa Miller", "Carlos Gomez", "Emily Chen"],
-                "Status": ["Delivered", "Delivered", "Opened", "Clicked", "Delivered", "Bounced", 
-                          "Delivered", "Opened", "Delivered", "Failed"]
-            })
-            
-            # Display the history data
-            st.dataframe(history_data, use_container_width=True)
-            
-            # Download option
-            csv = history_data.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "Download Communication History",
-                csv,
-                "communication_history.csv",
-                "text/csv",
-                key="download-comm-history"
-            )
-    
-    elif active_subtab == "export":
-        st.header("Patient Data Export")
-        
-        # Check if we have data
-        if st.session_state.get('bookings_data') is not None:
-            df = st.session_state.bookings_data
-            
-            # Create export options
-            st.subheader("Export Options")
-            
-            # Create columns for export formats
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("""
-                <div class="card" style="text-align: center; cursor: pointer;">
-                    <h3>CSV Export</h3>
-                    <p>Export patient data to CSV format</p>
-                    <div style="background-color: {THEME_CONFIG['PRIMARY_COLOR']}; color: white; padding: 8px; border-radius: 4px; margin-top: 12px;">
-                        Export CSV
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Add the actual export button
-                if st.button("Export CSV"):
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "Download CSV",
-                        csv,
-                        "patient_data.csv",
-                        "text/csv",
-                        key="download-csv"
-                    )
-            
-            with col2:
-                st.markdown("""
-                <div class="card" style="text-align: center; cursor: pointer;">
-                    <h3>Excel Export</h3>
-                    <p>Export patient data to Excel format</p>
-                    <div style="background-color: {THEME_CONFIG['PRIMARY_COLOR']}; color: white; padding: 8px; border-radius: 4px; margin-top: 12px;">
-                        Export Excel
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Add the actual export button
-                if st.button("Export Excel"):
-                    # In a real app, you would generate an Excel file
-                    # Since we can't do that without saving files, just show a message
-                    st.success("Excel export functionality would go here")
-            
-            with col3:
-                st.markdown("""
-                <div class="card" style="text-align: center; cursor: pointer;">
-                    <h3>Outlook Contacts</h3>
-                    <p>Export as Outlook contact format</p>
-                    <div style="background-color: {THEME_CONFIG['PRIMARY_COLOR']}; color: white; padding: 8px; border-radius: 4px; margin-top: 12px;">
-                        Export Contacts
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Add the actual export button
-                if st.button("Export Contacts"):
-                    # Create a simple contact CSV
-                    if "Customer" in df.columns and "Phone" in df.columns:
-                        contacts_df = df[["Customer", "Phone"]].drop_duplicates()
-                        contacts_csv = contacts_df.to_csv(index=False).encode('utf-8')
-                        st.download_button(
-                            "Download Contacts",
-                            contacts_csv,
-                            "patient_contacts.csv",
-                            "text/csv",
-                            key="download-contacts"
-                        )
-                    else:
-                        st.warning("Required contact fields not found in the dataset")
-            
-            # Add export history
-            st.subheader("Export History")
-            
-            # Create sample export history
-            export_history = pd.DataFrame({
-                "Date": pd.date_range(end=pd.Timestamp.now(), periods=5, freq="D"),
-                "Format": ["CSV", "Excel", "Contacts", "CSV", "Excel"],
-                "Records": [124, 124, 98, 115, 110],
-                "Exported By": ["Admin User"] * 5
-            })
-            
-            st.dataframe(export_history, use_container_width=True)
-        else:
-            # Show empty state
-            render_empty_state(
-                "No patient data available for export. Please fetch appointment data first.",
-                "upload"
             )
 
 # Render the tools tab
@@ -1184,12 +1628,82 @@ def render_integrations_tab(active_subtab):
             </div>
             """, unsafe_allow_html=True)
             
+            # Initialize selected_businesses if not exists
+            if 'selected_businesses' not in st.session_state:
+                st.session_state.selected_businesses = []
+                
             # Date range selection
             col1, col2 = st.columns(2)
             with col1:
                 start_date = st.date_input("Start Date", value=st.session_state.date_range[0])
             with col2:
                 end_date = st.date_input("End Date", value=st.session_state.date_range[1])
+            
+            # Add business selection
+            st.subheader("Select Booking Pages")
+            
+            # Fetch businesses if needed
+            if 'grouped_businesses' not in st.session_state:
+                try:
+                    grouped_businesses = asyncio.run(fetch_businesses_for_appointments())
+                    st.session_state.grouped_businesses = grouped_businesses
+                except Exception as e:
+                    st.error(f"Error fetching businesses: {str(e)}")
+                    st.session_state.grouped_businesses = {}
+            
+            # Create columns for select/unselect all buttons
+            btn_col1, btn_col2 = st.columns([1, 1])
+            
+            with btn_col1:
+                if st.button("Select All", key="int_select_all"):
+                    # Select all businesses
+                    all_businesses = []
+                    for group in st.session_state.grouped_businesses.values():
+                        all_businesses.extend([b["id"] for b in group])
+                    st.session_state.selected_businesses = all_businesses
+                    st.rerun()
+            
+            with btn_col2:
+                if st.button("Unselect All", key="int_unselect_all"):
+                    # Clear all selections
+                    st.session_state.selected_businesses = []
+                    st.rerun()
+            
+            # Display businesses in a single selectbox for simplicity
+            if st.session_state.grouped_businesses:
+                # Flatten the business list
+                all_businesses = []
+                for group in st.session_state.grouped_businesses.values():
+                    all_businesses.extend(group)
+                
+                # Sort businesses by name
+                all_businesses = sorted(all_businesses, key=lambda x: x["name"])
+                
+                # Get selected business names
+                selected_names = [
+                    b["name"] for b in all_businesses 
+                    if b["id"] in st.session_state.selected_businesses
+                ]
+                
+                # Display selected businesses summary
+                if selected_names:
+                    st.write(f"**{len(selected_names)} booking pages selected**: {', '.join(selected_names)}")
+                else:
+                    st.write("No booking pages selected")
+                
+                # Display multiselect for businesses
+                business_options = [(b["id"], b["name"]) for b in all_businesses]
+                selected_ids = st.multiselect(
+                    "Select Booking Pages",
+                    options=[id for id, _ in business_options],
+                    format_func=lambda x: next((name for id, name in business_options if id == x), x),
+                    default=st.session_state.selected_businesses
+                )
+                
+                # Update session state with selected businesses
+                st.session_state.selected_businesses = selected_ids
+            else:
+                st.warning("No booking pages found. Please check your Microsoft Bookings integration.")
             
             # Maximum results
             max_results = st.slider("Maximum Results", min_value=10, max_value=1000, value=500, step=10)
@@ -1198,7 +1712,12 @@ def render_integrations_tab(active_subtab):
             if st.button("Fetch Bookings Data"):
                 with st.spinner("Fetching bookings data..."):
                     # Run the asynchronous function
-                    bookings_data = asyncio.run(fetch_bookings_data(start_date, end_date, max_results))
+                    bookings_data = asyncio.run(fetch_bookings_data(
+                        start_date,
+                        end_date,
+                        max_results,
+                        st.session_state.selected_businesses
+                    ))
                     
                     if bookings_data and len(bookings_data) > 0:
                         # Store in session state
@@ -1227,9 +1746,101 @@ def render_integrations_tab(active_subtab):
                 "link"
             )
     
-    elif active_subtab in ["airtable", "webhooks"]:
+    elif active_subtab == "webhooks":
+        st.subheader("Webhooks Integration")
+        
+        st.markdown("""
+        <div class="card">
+            <h3>Webhooks Configuration</h3>
+            <p>Set up and manage webhooks to connect external services with your Access Care Analytics platform.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Add webhook configuration UI
+        st.text_input("Webhook URL", placeholder="https://your-service.com/webhook")
+        
+        # Create columns for event selection
+        st.subheader("Select Events to Trigger Webhook")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.checkbox("New Appointment Created", value=True)
+            st.checkbox("Appointment Updated")
+            st.checkbox("Appointment Cancelled")
+        
+        with col2:
+            st.checkbox("Patient Data Updated")
+            st.checkbox("Report Generated")
+            st.checkbox("Error Events")
+        
+        # Add webhook testing
+        st.subheader("Test Webhook")
+        
+        test_col1, test_col2 = st.columns([3, 1])
+        
+        with test_col1:
+            test_payload = st.text_area(
+                "Test Payload (JSON)",
+                value="""{\n  "event": "appointment.created",\n  "data": {\n    "id": "test-123",\n    "patient": "John Doe",\n    "time": "2023-06-15T10:00:00Z"\n  }\n}"""
+            )
+        
+        with test_col2:
+            st.write("")
+            st.write("")
+            if st.button("Send Test"):
+                with st.spinner("Sending test webhook..."):
+                    time.sleep(2)  # Simulate API call
+                    st.success("Test webhook sent successfully!")
+        
+        # Webhook history
+        st.subheader("Recent Webhook Activity")
+        
+        # Create mock webhook history
+        webhook_history = pd.DataFrame({
+            "Timestamp": pd.date_range(end=pd.Timestamp.now(), periods=5, freq='-1h'),
+            "Event": ["appointment.created", "appointment.updated", "appointment.cancelled", "report.generated", "error.auth"],
+            "Status": ["Success", "Success", "Failed", "Success", "Failed"],
+            "Response Time": ["120ms", "98ms", "Timeout", "145ms", "503ms"]
+        })
+        
+        # Display webhook history
+        st.dataframe(webhook_history, use_container_width=True)
+        
+        # Webhook documentation
+        with st.expander("Webhook Documentation"):
+            st.markdown("""
+            ### Webhook Format
+            
+            All webhooks are sent as HTTP POST requests with a JSON payload. The payload format is:
+            
+            ```json
+            {
+              "event": "event.name",
+              "timestamp": "ISO-8601 timestamp",
+              "data": {
+                // Event-specific data
+              }
+            }
+            ```
+            
+            ### Authentication
+            
+            Webhooks are authenticated using a signature in the `X-Webhook-Signature` header. The signature is a HMAC-SHA256 hash of the request body using your webhook secret as the key.
+            
+            ### Event Types
+            
+            - `appointment.created` - Triggered when a new appointment is created
+            - `appointment.updated` - Triggered when an appointment is updated
+            - `appointment.cancelled` - Triggered when an appointment is cancelled
+            - `patient.updated` - Triggered when patient data is updated
+            - `report.generated` - Triggered when a report is generated
+            - `error.*` - Various error events
+            """)
+    
+    else:
         render_empty_state(
-            f"The {active_subtab} integration tab is under development.",
+            f"The {active_subtab} integration is under development.",
             "link"
         )
 

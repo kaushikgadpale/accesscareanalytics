@@ -8,7 +8,7 @@
 
 /* Main header styling */
 h1, h2, h3, h4, h5, h6 {
-    color: #3b82f6 !important;
+    color: #1f2937 !important;
     font-family: 'Inter', 'Segoe UI', sans-serif;
     font-weight: 600;
 }
@@ -63,22 +63,37 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Button styling */
 .stButton>button {
-    background-color: #3b82f6 !important;
+    background-color: #1f2937 !important;
     color: white !important;
     border: none !important;
     border-radius: 6px !important;
     transition: all 0.2s ease !important;
+    font-weight: 500 !important;
 }
 
 .stButton>button:hover {
-    background-color: #2563eb !important;
+    background-color: #374151 !important;
     color: white !important;
+}
+
+/* Sidebar button styling - specifically target sidebar buttons */
+.stSidebar .stButton>button {
+    background-color: transparent !important;
+    color: #1f2937 !important;
+    border: 1px solid #e5e7eb !important;
+    text-align: left !important;
+    font-weight: 500 !important;
+}
+
+.stSidebar .stButton>button:hover {
+    background-color: #f3f4f6 !important;
+    border-color: #d1d5db !important;
 }
 
 /* Tab Button styling - specifically target buttons used as tabs */
 [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
     background-color: #f3f4f6 !important;
-    color: #333333 !important;
+    color: #1f2937 !important;
     border-radius: 8px 8px 0 0 !important;
     border-bottom: 3px solid transparent !important;
     font-weight: 500 !important;
@@ -196,6 +211,30 @@ h1, h2, h3, h4, h5, h6 {
     font-size: 1.1rem;
 }
 
+/* App header styling */
+.app-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.app-logo {
+    width: 80px;
+    margin-right: 1rem;
+}
+
+.app-title {
+    color: #1f2937 !important;
+    margin: 0;
+    font-size: 1.8rem;
+}
+
+.app-subtitle {
+    color: #6b7280;
+    margin: 0;
+    font-size: 1rem;
+}
+
 /* Data visualization styles */
 .plot-container {
     background-color: #ffffff !important;
@@ -211,7 +250,7 @@ h1, h2, h3, h4, h5, h6 {
 
 .dataframe th {
     background-color: #f3f4f6 !important;
-    color: #3b82f6 !important;
+    color: #1f2937 !important;
     border-color: #e5e7eb !important;
 }
 
@@ -248,43 +287,19 @@ h1, h2, h3, h4, h5, h6 {
     margin-bottom: 0 !important;
 }
 
-.mb-1 {
+.mb-2 {
     margin-bottom: 0.5rem !important;
 }
 
-.mb-2 {
-    margin-bottom: 1rem !important;
-}
-
 .mt-2 {
-    margin-top: 1rem !important;
+    margin-top: 0.5rem !important;
 }
 
 .p-2 {
-    padding: 1rem !important;
+    padding: 0.5rem !important;
 }
 
-/* App header with logo and title */
-.app-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid #e5e7eb;
-}
-
-.app-logo {
-    height: 50px;
-    margin-right: 1rem;
-}
-
-.app-title {
-    margin: 0;
-}
-
-.app-subtitle {
-    margin: 0;
-    color: #6b7280;
-    font-weight: normal;
-    opacity: 0.8;
+/* Fix for tooltip hover - remove it as requested */
+[data-testid="stTooltip"] {
+    display: none !important;
 } 

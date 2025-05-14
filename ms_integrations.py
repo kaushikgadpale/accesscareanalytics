@@ -10,28 +10,125 @@ from msgraph.generated.users.item.calendar.events.events_request_builder import 
 from kiota_abstractions.base_request_configuration import RequestConfiguration
 from auth import get_auth_headers
 from data_fetcher import fetch_appointments, fetch_businesses
+import os
+
+# Get mailboxes from environment variable
+BOOKINGS_MAILBOXES = os.getenv("BOOKINGS_MAILBOXES", "").split(",")
 
 async def get_graph_client():
     """Initialize Microsoft Graph client using Azure authentication"""
     from data_fetcher import get_graph_client as fetch_graph_client
     return await fetch_graph_client()
 
-async def fetch_bookings_data(start_date, end_date, max_results=500):
+async def fetch_businesses_for_appointments():
+    """
+    Fetch all businesses from Microsoft Bookings for appointments section
+    Returns businesses organized for display with grouping by first two letters
+    """
+    try:
+        # Fetch all businesses
+        businesses = await fetch_businesses()
+        
+        if not businesses:
+            return {}
+            
+        # Organize businesses by first two letters of name
+        grouped_businesses = {}
+        for business in businesses:
+            name = business["name"]
+            # Use first two letters for grouping (or just first letter if name is only one character)
+            prefix = name[:2].upper() if len(name) > 1 else name[0].upper()
+            
+            if prefix not in grouped_businesses:
+                grouped_businesses[prefix] = []
+            
+            grouped_businesses[prefix].append(business)
+        
+        # Sort the groups and businesses within each group
+        sorted_groups = {}
+        for prefix in sorted(grouped_businesses.keys()):
+            sorted_groups[prefix] = sorted(grouped_businesses[prefix], key=lambda x: x["name"])
+            
+        return sorted_groups
+    except Exception as e:
+        st.error(f"Failed to fetch businesses: {str(e)}")
+        return {}
+
+async def fetch_bookings_data(start_date, end_date, max_results=500, selected_businesses=None):
     """Fetch bookings data for the specified date range"""
     try:
         st.info("Fetching bookings data...")
         
-        # Get all businesses without filters (this will get all available Bookings pages)
-        businesses = await fetch_businesses()
-        if not businesses:
-            st.warning("No businesses found in your Microsoft Bookings account")
-            return []
+        # Debug information about parameters
+        st.write(f"Debug: start_date = {start_date}, end_date = {end_date}, max_results = {max_results}")
+        st.write(f"Debug: selected_businesses type = {type(selected_businesses)}")
         
+        # Use provided selected businesses if available
+        businesses = selected_businesses
+        
+        # Handle None or empty list case
+        if businesses is None or (isinstance(businesses, list) and len(businesses) == 0):
+            st.info("No businesses selected, fetching all available businesses")
+            businesses = await fetch_businesses()
+            if not businesses:
+                st.warning("No businesses found in your Microsoft Bookings account")
+                return []
+        else:
+            # Debug selected businesses
+            if isinstance(businesses, list):
+                st.write(f"Debug: Number of selected businesses = {len(businesses)}")
+                if len(businesses) > 0:
+                    st.write(f"Debug: First selected business = {businesses[0]}, type = {type(businesses[0])}")
+        
+        # Ensure businesses is a list
+        if not isinstance(businesses, list):
+            businesses = [businesses]
+            
+        # If businesses are just IDs (strings), convert them to proper format for fetch_appointments
+        processed_businesses = []
+        try:
+            if businesses and isinstance(businesses[0], str):
+                # These are likely just IDs, fetch the full business information
+                st.info("Converting business IDs to full business objects")
+                all_business_details = await fetch_businesses()
+                
+                if not all_business_details:
+                    st.warning("Failed to fetch business details")
+                    return []
+                    
+                # Match IDs with business details
+                for business_id in businesses:
+                    business_info = next((b for b in all_business_details if b["id"] == business_id), None)
+                    if business_info:
+                        processed_businesses.append(business_info)
+                        st.write(f"Found business: {business_info['name']}")
+                    else:
+                        st.warning(f"Could not find details for business ID: {business_id}")
+                
+                if processed_businesses:
+                    businesses = processed_businesses
+                else:
+                    st.warning("Could not find details for any of the selected businesses")
+                    return []
+        except Exception as e:
+            st.error(f"Error processing business IDs: {str(e)}")
+            import traceback
+            st.error(f"Traceback: {traceback.format_exc()}")
+            # Continue with original businesses list
+            
         st.info(f"Found {len(businesses)} booking pages. Fetching appointments for each page...")
         
         # Display the business pages we're fetching from
-        business_names = [b["name"] for b in businesses]
-        st.write("Fetching from booking pages:", ", ".join(business_names))
+        try:
+            business_names = [b["name"] for b in businesses if isinstance(b, dict) and "name" in b]
+            if business_names:
+                st.write("Fetching from booking pages:", ", ".join(business_names))
+            else:
+                st.write("Fetching from booking pages (names not available)")
+                st.write("Businesses:", businesses)
+        except Exception as e:
+            st.warning(f"Could not extract business names: {str(e)}")
+            st.write("Businesses:", businesses)
         
         # Fetch appointments for each business
         appointments = await fetch_appointments(businesses, start_date, end_date, max_results)
@@ -45,6 +142,8 @@ async def fetch_bookings_data(start_date, end_date, max_results=500):
         
     except Exception as e:
         st.error(f"Failed to fetch bookings data: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return []
 
 async def inspect_calendar_api():
@@ -62,7 +161,7 @@ async def inspect_calendar_api():
     except Exception as e:
         return None, f"Error inspecting calendar API: {str(e)}"
 
-async def fetch_calendar_events(start_date, end_date, max_results=500, user_id="me"):
+async def fetch_calendar_events(start_date, end_date, max_results=1000, user_id="me"):
     """Fetch calendar events for a user in the specified date range"""
     try:
         graph_client = await get_graph_client()
@@ -78,48 +177,206 @@ async def fetch_calendar_events(start_date, end_date, max_results=500, user_id="
         start_str = start_datetime.isoformat().replace('+00:00', 'Z')
         end_str = end_datetime.isoformat().replace('+00:00', 'Z')
         
-        st.info("Attempting to fetch calendar events...")
+        st.info("Fetching calendars and events...")
         
-        # Most basic approach possible - just get all events
+        # First get all available calendars from the user
+        # This follows the Microsoft Graph API documentation at:
+        # https://learn.microsoft.com/en-us/graph/api/user-list-calendars
         try:
-            # Don't use "me" as user_id, use an explicit ID or try without user ID specification
-            if user_id == "me":
-                # Try using calendar directly without specifying user
-                result = await graph_client.me.calendar.events.get()
-            else:
-                result = await graph_client.users.by_user_id(user_id).calendar.events.get()
+            # Get all calendars for the user
+            calendars = await graph_client.me.calendars.get()
             
-            if result and hasattr(result, "value") and result.value:
-                st.success(f"Successfully fetched {len(result.value)} events, now filtering by date range")
-                # Filter events by date manually
-                filtered_events = []
-                for event in result.value:
-                    try:
-                        if hasattr(event, "start") and hasattr(event.start, "date_time"):
-                            event_start = datetime.fromisoformat(event.start.date_time.replace('Z', '+00:00'))
-                            event_start_date = event_start.date()
-                            
-                            # Check if event is within date range
-                            if start_date <= event_start_date <= end_date:
-                                filtered_events.append(event)
-                    except Exception as filter_err:
-                        continue
+            if not calendars or not hasattr(calendars, "value") or not calendars.value:
+                st.warning("No calendars found for the user. Using default calendar.")
+                # If no calendars found, try with default calendar
+                return await fetch_default_calendar_events(graph_client, start_str, end_str, max_results)
+            
+            st.success(f"Found {len(calendars.value)} calendars")
+            
+            # Show available calendars
+            calendar_names = [calendar.name for calendar in calendars.value if hasattr(calendar, "name")]
+            st.write("Calendars found:", ", ".join(calendar_names))
+            
+            # Fetch events from all calendars
+            all_events = []
+            
+            # Create a progress bar for fetching events
+            progress_bar = st.progress(0)
+            calendar_count = len(calendars.value)
+            
+            for i, calendar in enumerate(calendars.value):
+                if not hasattr(calendar, "id"):
+                    continue
+                    
+                calendar_id = calendar.id
+                calendar_name = calendar.name if hasattr(calendar, "name") else f"Calendar {calendar_id}"
                 
-                if filtered_events:
-                    st.success(f"Found {len(filtered_events)} events in the specified date range")
-                    return process_calendar_events(filtered_events)
-                else:
-                    st.warning("No events found in the specified date range")
+                progress_text = f"Fetching events from calendar: {calendar_name} ({i+1}/{calendar_count})"
+                progress_bar.progress((i / calendar_count), text=progress_text)
+                
+                # Get events from this calendar using the time filter and pagination
+                try:
+                    # Use the documented Filter query parameter to filter by time
+                    events_filter = f"start/dateTime ge '{start_str}' and end/dateTime le '{end_str}'"
+                    
+                    # Build the request with filter
+                    events_request = graph_client.me.calendars.by_calendar_id(calendar_id).events
+                    
+                    # Create request configuration with filter
+                    request_config = RequestConfiguration()
+                    request_config.query_parameters = {
+                        "$filter": events_filter,
+                        "$top": min(1000, max_results),  # Request maximum allowed in a single call
+                        "$orderby": "start/dateTime"
+                    }
+                    
+                    # Execute the request with filter
+                    calendar_events = await events_request.get(request_configuration=request_config)
+                    events_fetched = []
+                    
+                    if calendar_events and hasattr(calendar_events, "value"):
+                        # Add calendar name to each event for tracking
+                        for event in calendar_events.value:
+                            setattr(event, "calendar_name", calendar_name)
+                        
+                        events_fetched.extend(calendar_events.value)
+                        
+                        # Handle pagination - check if there are more pages
+                        next_link = getattr(calendar_events, "odata_next_link", None)
+                        
+                        # Fetch additional pages if they exist and if we haven't hit max_results
+                        while next_link and len(events_fetched) < max_results:
+                            # Create a new request with the nextLink
+                            next_request = graph_client.me.calendars.by_calendar_id(calendar_id).events.with_url(next_link)
+                            next_events = await next_request.get()
+                            
+                            if next_events and hasattr(next_events, "value"):
+                                # Add calendar name to each event
+                                for event in next_events.value:
+                                    setattr(event, "calendar_name", calendar_name)
+                                
+                                events_fetched.extend(next_events.value)
+                                next_link = getattr(next_events, "odata_next_link", None)
+                            else:
+                                break
+                                
+                            # Check if we've reached max_results
+                            if len(events_fetched) >= max_results:
+                                st.warning(f"Reached maximum event limit ({max_results}) for calendar {calendar_name}")
+                                break
+                        
+                        # Update progress
+                        progress_text = f"Found {len(events_fetched)} events in calendar: {calendar_name}"
+                        progress_bar.progress((i / calendar_count), text=progress_text)
+                        
+                        # Add all events from this calendar to the overall collection
+                        all_events.extend(events_fetched)
+                        st.success(f"Found {len(events_fetched)} events in calendar {calendar_name}")
+                    else:
+                        st.info(f"No events found in calendar {calendar_name} for the specified date range")
+                        
+                except Exception as cal_err:
+                    st.warning(f"Error fetching events from calendar {calendar_name}: {str(cal_err)}")
+                    continue
+            
+            # Complete the progress bar
+            progress_bar.progress(1.0, text="Completed fetching all calendar events")
+            
+            if all_events:
+                st.success(f"Successfully fetched a total of {len(all_events)} events from all calendars")
+                return process_calendar_events(all_events)
             else:
-                st.warning("API request returned no events")
-        except Exception as e:
-            st.error(f"Calendar API request failed: {str(e)}")
+                st.warning("No events found across all calendars in the specified date range")
+                return []
+                
+        except Exception as cal_list_err:
+            st.warning(f"Error listing calendars: {str(cal_list_err)}")
+            # Fallback to default calendar
+            return await fetch_default_calendar_events(graph_client, start_str, end_str, max_results)
         
         # If all approaches fail
         st.warning("No calendar events found for the selected date range")
         return []
     except Exception as e:
         st.error(f"Failed to fetch calendar events: {str(e)}")
+        return []
+
+async def fetch_default_calendar_events(graph_client, start_str, end_str, max_results=1000):
+    """Fetch events from the default calendar"""
+    try:
+        st.info("Attempting to fetch events from the default calendar...")
+        
+        # Use the documented Filter query parameter to filter by time
+        events_filter = f"start/dateTime ge '{start_str}' and end/dateTime le '{end_str}'"
+        
+        # Build the request with filter
+        events_request = graph_client.me.calendar.events
+        
+        # Create request configuration with filter
+        request_config = RequestConfiguration()
+        request_config.query_parameters = {
+            "$filter": events_filter, 
+            "$top": min(1000, max_results),
+            "$orderby": "start/dateTime"
+        }
+        
+        # Execute the request with filter
+        events = await events_request.get(request_configuration=request_config)
+        events_fetched = []
+        
+        if events and hasattr(events, "value"):
+            # Add default calendar name to each event
+            for event in events.value:
+                setattr(event, "calendar_name", "Default Calendar")
+                
+            events_fetched.extend(events.value)
+            
+            # Handle pagination - check if there are more pages
+            next_link = getattr(events, "odata_next_link", None)
+            
+            # Create a progress bar for pagination
+            if next_link:
+                progress_bar = st.progress(0)
+                progress_bar.progress(len(events_fetched) / max_results, text=f"Fetched {len(events_fetched)} events so far...")
+            
+            # Fetch additional pages if they exist and if we haven't hit max_results
+            while next_link and len(events_fetched) < max_results:
+                # Create a new request with the nextLink
+                next_request = graph_client.me.calendar.events.with_url(next_link)
+                next_events = await next_request.get()
+                
+                if next_events and hasattr(next_events, "value"):
+                    # Add calendar name to each event
+                    for event in next_events.value:
+                        setattr(event, "calendar_name", "Default Calendar")
+                    
+                    events_fetched.extend(next_events.value)
+                    next_link = getattr(next_events, "odata_next_link", None)
+                    
+                    # Update progress
+                    if len(events_fetched) < max_results:
+                        progress_value = min(1.0, len(events_fetched) / max_results)
+                        progress_bar.progress(progress_value, text=f"Fetched {len(events_fetched)} events so far...")
+                else:
+                    break
+                    
+                # Check if we've reached max_results
+                if len(events_fetched) >= max_results:
+                    st.warning(f"Reached maximum event limit ({max_results}) for default calendar")
+                    break
+            
+            # Complete the progress bar if it exists
+            if 'progress_bar' in locals():
+                progress_bar.progress(1.0, text="Completed fetching all calendar events")
+                
+            st.success(f"Successfully fetched {len(events_fetched)} events from default calendar")
+            return process_calendar_events(events_fetched)
+        else:
+            st.warning("No events found in default calendar for the specified date range")
+            return []
+            
+    except Exception as e:
+        st.error(f"Error fetching events from default calendar: {str(e)}")
         return []
 
 def process_calendar_events(events):
@@ -132,6 +389,7 @@ def process_calendar_events(events):
                 "Subject": getattr(event, "subject", ""),
                 "Start Time": datetime.fromisoformat(getattr(event.start, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "start") and hasattr(event.start, "date_time") else None,
                 "End Time": datetime.fromisoformat(getattr(event.end, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "end") and hasattr(event.end, "date_time") else None,
+                "Calendar": getattr(event, "calendar_name", "Default"),
                 "Organizer": getattr(event.organizer.email_address, "name", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
                 "Organizer Email": getattr(event.organizer.email_address, "address", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
                 "Location": getattr(event.location, "display_name", "") if hasattr(event, "location") else "",
@@ -758,4 +1016,338 @@ def render_forms_tab():
             f"form_responses_{form_data['title'].replace(' ', '_')}.csv",
             "text/csv",
             key="download-form-responses"
-        ) 
+        )
+
+async def track_booking_cancellations(start_date, end_date, selected_businesses=None, max_results=1000, check_emails=True, email_days_back=30):
+    """
+    Track cancelled appointments by comparing current and previous appointment data
+    and by checking cancellation emails in mailboxes.
+    
+    Args:
+        start_date: Start date for fetching appointments
+        end_date: End date for fetching appointments
+        selected_businesses: List of business IDs to fetch appointments for
+        max_results: Maximum number of results to fetch
+        check_emails: Whether to also check cancellation emails
+        email_days_back: Number of days to look back for cancellation emails
+        
+    Returns:
+        List of cancelled appointments (appointments present in previous data but not in current)
+    """
+    try:
+        cancellations = []
+        
+        # Method 1: Compare current and previous appointment datasets
+        st.info("Checking for cancelled appointments by comparing datasets...")
+        
+        # Get current appointments
+        current_appointments = await fetch_bookings_data(start_date, end_date, max_results, selected_businesses)
+        
+        # Convert to DataFrame for easier comparison
+        current_df = pd.DataFrame(current_appointments) if current_appointments else pd.DataFrame()
+        
+        # Get previous snapshot from session state if it exists
+        if 'previous_appointments' not in st.session_state:
+            st.session_state.previous_appointments = current_df
+            st.info("First run - storing current appointments as baseline")
+        else:
+            # Get previous snapshot
+            previous_df = st.session_state.previous_appointments
+            
+            # Find cancelled appointments (present in previous but not in current)
+            comparison_cancellations = []
+            if not previous_df.empty and not current_df.empty and 'ID' in previous_df.columns and 'ID' in current_df.columns:
+                previous_ids = set(previous_df['ID'])
+                current_ids = set(current_df['ID'])
+                
+                # IDs that were in previous but not in current
+                cancelled_ids = previous_ids - current_ids
+                
+                # Get the full records for cancelled appointments
+                if cancelled_ids:
+                    comparison_cancellations = previous_df[previous_df['ID'].isin(cancelled_ids)].to_dict('records')
+                    
+                    # Add cancellation source
+                    for appt in comparison_cancellations:
+                        appt["CancellationSource"] = "Dataset Comparison"
+                    
+                    st.success(f"Found {len(comparison_cancellations)} cancelled appointments by comparing datasets")
+                    cancellations.extend(comparison_cancellations)
+                else:
+                    st.info("No cancellations found by comparing datasets")
+        
+        # Update the previous appointments for next time
+        st.session_state.previous_appointments = current_df
+        
+        # Method 2: Check cancellation emails in mailboxes
+        if check_emails:
+            st.info("Checking for cancellation emails in mailboxes...")
+            email_cancellations = await fetch_cancellation_emails(email_days_back)
+            
+            if email_cancellations:
+                st.success(f"Found {len(email_cancellations)} cancellations from emails")
+                
+                # Add to cancellations list, avoiding duplicates by ID if possible
+                existing_ids = set(c.get('ID') for c in cancellations if c.get('ID'))
+                
+                for email_cancel in email_cancellations:
+                    if not email_cancel.get('ID') or email_cancel.get('ID') not in existing_ids:
+                        cancellations.append(email_cancel)
+                        if email_cancel.get('ID'):
+                            existing_ids.add(email_cancel.get('ID'))
+            else:
+                st.info("No cancellations found in emails")
+        
+        # Return all cancellations found
+        return cancellations
+        
+    except Exception as e:
+        st.error(f"Error tracking cancellations: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        return []
+
+async def fetch_cancellation_emails(days_back=30):
+    """
+    Fetch cancellation emails from mailboxes defined in BOOKINGS_MAILBOXES env var
+    
+    Args:
+        days_back: Number of days to look back for cancellation emails
+        
+    Returns:
+        List of cancellation emails with appointment details
+    """
+    try:
+        # If no mailboxes are defined, return empty list
+        if not BOOKINGS_MAILBOXES or BOOKINGS_MAILBOXES[0] == '':
+            st.warning("No mailboxes defined in BOOKINGS_MAILBOXES environment variable")
+            return []
+            
+        st.info(f"Checking {len(BOOKINGS_MAILBOXES)} mailboxes for cancellation emails...")
+        
+        # Get graph client
+        graph_client = await get_graph_client()
+        if not graph_client:
+            st.error("Failed to initialize Graph client")
+            return []
+            
+        # Calculate date range for search
+        end_date = datetime.now(LOCAL_TZ)
+        start_date = end_date - timedelta(days=days_back)
+        
+        # Format dates for API
+        start_str = start_date.isoformat()
+        end_str = end_date.isoformat()
+        
+        all_cancellation_emails = []
+        
+        # Create a progress bar
+        progress_bar = st.progress(0)
+        
+        # Process each mailbox
+        for i, mailbox in enumerate(BOOKINGS_MAILBOXES):
+            if not mailbox.strip():
+                continue
+                
+            progress_bar.progress((i / len(BOOKINGS_MAILBOXES)), text=f"Checking mailbox: {mailbox}")
+            
+            try:
+                # Search for emails with 'cancelled' or 'canceled' in the subject or body
+                # This follows the Microsoft Graph API for searching messages
+                search_query = "(subject:cancelled OR subject:canceled OR subject:cancellation OR body:cancelled OR body:canceled OR body:cancellation) AND received:>=" + start_str + " AND received:<=" + end_str
+                
+                # Create request configuration with search query
+                request_config = RequestConfiguration()
+                request_config.query_parameters = {
+                    "$search": f'"{search_query}"',
+                    "$orderby": "receivedDateTime desc",
+                    "$top": 100,  # Max items per request
+                    "$select": "id,subject,receivedDateTime,from,body,bodyPreview"
+                }
+                
+                # Execute the search, handling proper mailbox access
+                if mailbox.lower() == "me" or not mailbox.strip():
+                    # Use current user's mailbox
+                    messages_request = graph_client.me.messages
+                else:
+                    # Use specific mailbox
+                    messages_request = graph_client.users.by_user_id(mailbox).messages
+                
+                # Get messages with search parameters
+                messages = await messages_request.get(request_configuration=request_config)
+                
+                if not messages or not hasattr(messages, "value"):
+                    st.info(f"No cancellation emails found in {mailbox}")
+                    continue
+                    
+                st.success(f"Found {len(messages.value)} potential cancellation emails in {mailbox}")
+                
+                # Process each message
+                for message in messages.value:
+                    # Extract appointment details from email
+                    appointment_info = extract_appointment_from_email(message)
+                    if appointment_info:
+                        appointment_info["Mailbox"] = mailbox
+                        appointment_info["EmailID"] = message.id if hasattr(message, "id") else ""
+                        appointment_info["ReceivedTime"] = message.received_date_time if hasattr(message, "received_date_time") else None
+                        all_cancellation_emails.append(appointment_info)
+                
+                # Check if there are more pages
+                next_link = getattr(messages, "odata_next_link", None)
+                
+                # Handle pagination
+                while next_link and len(all_cancellation_emails) < 500:  # Limit to 500 emails total
+                    next_request = messages_request.with_url(next_link)
+                    next_messages = await next_request.get()
+                    
+                    if next_messages and hasattr(next_messages, "value"):
+                        for message in next_messages.value:
+                            appointment_info = extract_appointment_from_email(message)
+                            if appointment_info:
+                                appointment_info["Mailbox"] = mailbox
+                                appointment_info["EmailID"] = message.id if hasattr(message, "id") else ""
+                                appointment_info["ReceivedTime"] = message.received_date_time if hasattr(message, "received_date_time") else None
+                                all_cancellation_emails.append(appointment_info)
+                                
+                        next_link = getattr(next_messages, "odata_next_link", None)
+                    else:
+                        break
+            
+            except Exception as e:
+                st.error(f"Error processing mailbox {mailbox}: {str(e)}")
+                continue
+                
+        # Complete the progress bar
+        progress_bar.progress(1.0, text=f"Completed checking all mailboxes")
+        
+        # Return all found cancellation emails
+        return all_cancellation_emails
+        
+    except Exception as e:
+        st.error(f"Error fetching cancellation emails: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        return []
+
+def extract_appointment_from_email(message):
+    """
+    Extract appointment details from an email message object
+    
+    Args:
+        message: Email message object from Microsoft Graph
+        
+    Returns:
+        Dictionary with appointment details or None if not a cancellation
+    """
+    try:
+        # Basic validation
+        if not hasattr(message, "subject") or not message.subject:
+            return None
+            
+        subject = message.subject.lower()
+        body_preview = message.body_preview.lower() if hasattr(message, "body_preview") and message.body_preview else ""
+        body = message.body.content if hasattr(message, "body") and hasattr(message.body, "content") else ""
+        
+        # Check if this is definitely a cancellation email
+        cancellation_terms = ["cancelled", "canceled", "cancellation"]
+        is_cancellation = any(term in subject for term in cancellation_terms) or any(term in body_preview for term in cancellation_terms)
+        
+        if not is_cancellation:
+            return None
+            
+        # Extract customer name - look for common patterns
+        # This is a basic implementation - can be enhanced with more robust regex patterns
+        customer_name = ""
+        if "appointment with" in body.lower():
+            # Try to extract name after "appointment with"
+            name_part = body.lower().split("appointment with")[1].split(".")[0].strip()
+            if name_part and len(name_part) < 50:  # Reasonable name length
+                customer_name = name_part
+                
+        # Default values for extracted information
+        appointment_info = {
+            "ID": None,  # Will be filled if we can extract a booking ID
+            "Customer": customer_name,
+            "Business": None,
+            "Service": None,
+            "Status": "Cancelled",
+            "Start Date": None,
+            "Subject": message.subject,
+            "CancellationSource": "Email"
+        }
+        
+        # Try to extract appointment ID - look for common patterns
+        # IDs often appear as "Booking #12345" or "Appointment ID: 12345"
+        id_patterns = [
+            r"booking\s+#?\s*([a-zA-Z0-9-]+)",
+            r"appointment\s+#?\s*([a-zA-Z0-9-]+)",
+            r"confirmation\s+#?\s*([a-zA-Z0-9-]+)",
+            r"id:\s*([a-zA-Z0-9-]+)",
+            r"reference\s+#?\s*([a-zA-Z0-9-]+)"
+        ]
+        
+        import re
+        for pattern in id_patterns:
+            match = re.search(pattern, body.lower())
+            if match:
+                appointment_info["ID"] = match.group(1)
+                break
+                
+        # Try to extract appointment date
+        date_patterns = [
+            r"appointment\s+on\s+(\w+,\s+\w+\s+\d{1,2},\s+\d{4})",
+            r"scheduled\s+for\s+(\w+,\s+\w+\s+\d{1,2},\s+\d{4})",
+            r"(\d{1,2}/\d{1,2}/\d{2,4})",
+            r"(\d{4}-\d{2}-\d{2})"
+        ]
+        
+        for pattern in date_patterns:
+            match = re.search(pattern, body)
+            if match:
+                try:
+                    # This is a simplistic date parser - could be enhanced
+                    date_str = match.group(1)
+                    # Try different date formats
+                    for fmt in ["%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%B %d, %Y", "%A, %B %d, %Y"]:
+                        try:
+                            appointment_date = datetime.strptime(date_str, fmt)
+                            appointment_info["Start Date"] = appointment_date
+                            break
+                        except ValueError:
+                            continue
+                except Exception:
+                    pass
+                
+                if appointment_info["Start Date"]:
+                    break
+        
+        # Extract business name from email domains and signature blocks
+        if hasattr(message, "from") and hasattr(message.from_, "email_address"):
+            sender_email = message.from_.email_address.address if hasattr(message.from_.email_address, "address") else ""
+            
+            # Check if it's from a business domain
+            if sender_email and "@" in sender_email:
+                domain = sender_email.split("@")[1]
+                if "accesscare" in domain:
+                    appointment_info["Business"] = "Access Care"
+                    
+        # Look for service name in common formats
+        service_patterns = [
+            r"service:\s*([^\n\r.]+)",
+            r"appointment\s+type:\s*([^\n\r.]+)",
+            r"regarding\s+your\s+([^\n\r.]+?)\s+appointment"
+        ]
+        
+        for pattern in service_patterns:
+            match = re.search(pattern, body.lower())
+            if match:
+                service = match.group(1).strip()
+                if service and len(service) < 50:  # Reasonable service name length
+                    appointment_info["Service"] = service
+                break
+                
+        return appointment_info
+        
+    except Exception as e:
+        st.warning(f"Error extracting appointment from email: {str(e)}")
+        return None 

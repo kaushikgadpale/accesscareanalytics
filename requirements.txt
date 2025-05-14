@@ -7,6 +7,7 @@ pytz>=2023.3
 requests>=2.30.0
 msgraph-core>=0.2.2
 msgraph-sdk>=1.0.0
+streamlit-extras>=0.3.0
 
 # For webhook server and env loading
 fastapi>=0.109.0
