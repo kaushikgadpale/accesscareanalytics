@@ -678,38 +678,52 @@ def render_dashboard_tab(active_subtab):
                         timeline_df = timeline_df.dropna(subset=['Date'])
                         
                         if not timeline_df.empty:
-                            # Group by date and source
-                            timeline_df['Date'] = timeline_df['Date'].dt.date
+                            # Make sure the Date column is datetime type before using .dt accessor
+                            if not pd.api.types.is_datetime64_dtype(timeline_df['Date']):
+                                try:
+                                    # Try to convert to datetime if it's not already
+                                    timeline_df['Date'] = pd.to_datetime(timeline_df['Date'], errors='coerce')
+                                    # Drop any rows where conversion failed
+                                    timeline_df = timeline_df.dropna(subset=['Date'])
+                                except Exception as e:
+                                    st.error(f"Error converting dates: {str(e)}")
+                                    st.info("Unable to create timeline visualization due to date format issues.")
+                                    return
                             
-                            if 'CancellationSource' in timeline_df.columns:
-                                daily_counts = timeline_df.groupby(['Date', 'CancellationSource']).size().reset_index(name='Count')
+                            # Now safely extract the date component
+                            if not timeline_df.empty and pd.api.types.is_datetime64_dtype(timeline_df['Date']):
+                                # Group by date and source
+                                timeline_df['Date'] = timeline_df['Date'].dt.date
                                 
-                                fig = px.line(
-                                    daily_counts,
-                                    x='Date',
-                                    y='Count',
-                                    color='CancellationSource',
-                                    title='Cancellations Over Time',
-                                    markers=True
-                                )
-                            else:
-                                daily_counts = timeline_df.groupby('Date').size().reset_index(name='Count')
+                                if 'CancellationSource' in timeline_df.columns:
+                                    daily_counts = timeline_df.groupby(['Date', 'CancellationSource']).size().reset_index(name='Count')
+                                    
+                                    fig = px.line(
+                                        daily_counts,
+                                        x='Date',
+                                        y='Count',
+                                        color='CancellationSource',
+                                        title='Cancellations Over Time',
+                                        markers=True
+                                    )
+                                else:
+                                    daily_counts = timeline_df.groupby('Date').size().reset_index(name='Count')
+                                    
+                                    fig = px.line(
+                                        daily_counts,
+                                        x='Date',
+                                        y='Count',
+                                        title='Cancellations Over Time',
+                                        markers=True
+                                    )
                                 
-                                fig = px.line(
-                                    daily_counts,
-                                    x='Date',
-                                    y='Count',
-                                    title='Cancellations Over Time',
-                                    markers=True
+                                fig.update_layout(
+                                    xaxis_title="Date",
+                                    yaxis_title="Number of Cancellations",
+                                    height=400
                                 )
-                            
-                            fig.update_layout(
-                                xaxis_title="Date",
-                                yaxis_title="Number of Cancellations",
-                                height=400
-                            )
-                            
-                            st.plotly_chart(fig, use_container_width=True)
+                                
+                                st.plotly_chart(fig, use_container_width=True)
                         else:
                             st.info("No timeline data available for cancellations")
                     
@@ -885,13 +899,36 @@ def render_dashboard_tab(active_subtab):
                     
                     if not creation_df.empty:
                         # Convert timestamps to naive datetime to avoid timezone warnings
-                        if pd.api.types.is_datetime64_dtype(creation_df['Created Date']):
-                            creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
+                        if 'Created Date' in creation_df.columns and pd.api.types.is_datetime64_dtype(creation_df['Created Date']):
+                            # Make a copy to avoid warnings
+                            creation_df = creation_df.copy()
+                            # Remove timezone info properly
+                            if hasattr(creation_df['Created Date'].dtype, 'tz') and creation_df['Created Date'].dtype.tz is not None:
+                                creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
                         
-                        # Group by selected frequency
-                        creation_df['Period'] = creation_df['Created Date'].dt.to_period(freq_map[date_level])
+                        # Group by selected frequency - using a different approach to avoid period warnings
+                        # Instead of using to_period, use date components directly
+                        if freq_map[date_level] == 'D':
+                            # Daily - just use the date component
+                            creation_df['Period'] = creation_df['Created Date'].dt.date
+                        elif freq_map[date_level] == 'W':
+                            # Weekly - use start of week
+                            creation_df['Period'] = creation_df['Created Date'].dt.to_period('W').dt.start_time.dt.date
+                        elif freq_map[date_level] == 'M':
+                            # Monthly - use year-month
+                            creation_df['Period'] = creation_df['Created Date'].dt.strftime('%Y-%m')
+                        elif freq_map[date_level] == 'Q':
+                            # Quarterly - use year-quarter
+                            creation_df['Period'] = creation_df['Created Date'].dt.to_period('Q').astype(str)
+                        elif freq_map[date_level] == 'Y':
+                            # Yearly - use year
+                            creation_df['Period'] = creation_df['Created Date'].dt.year.astype(str)
+                        else:
+                            # Default to daily
+                            creation_df['Period'] = creation_df['Created Date'].dt.date
+                        
+                        # Group by Period
                         creation_counts = creation_df.groupby('Period').size().reset_index(name='Count')
-                        creation_counts['Period'] = creation_counts['Period'].astype(str)
                         
                         # Create creation time graph
                         fig_creation = px.line(
@@ -926,15 +963,35 @@ def render_dashboard_tab(active_subtab):
                     if not booking_df.empty:
                         # Convert timestamps to naive datetime to avoid timezone warnings
                         if 'Start Date' in booking_df.columns and pd.api.types.is_datetime64_dtype(booking_df['Start Date']):
-                            booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
+                            # Make a copy to avoid warnings
+                            booking_df = booking_df.copy()
+                            # Remove timezone info properly
+                            if hasattr(booking_df['Start Date'].dtype, 'tz') and booking_df['Start Date'].dtype.tz is not None:
+                                booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
                         
-                        # Group by business and period
-                        booking_df['Period'] = booking_df['Start Date'].dt.to_period(freq_map[date_level])
+                        # Define the Period column based on the selected frequency
+                        if freq_map[date_level] == 'D':
+                            # Daily - just use the date component
+                            booking_df['Period'] = booking_df['Start Date'].dt.date
+                        elif freq_map[date_level] == 'W':
+                            # Weekly - use start of week
+                            booking_df['Period'] = booking_df['Start Date'].dt.to_period('W').dt.start_time.dt.date
+                        elif freq_map[date_level] == 'M':
+                            # Monthly - use year-month
+                            booking_df['Period'] = booking_df['Start Date'].dt.strftime('%Y-%m')
+                        elif freq_map[date_level] == 'Q':
+                            # Quarterly - use year-quarter
+                            booking_df['Period'] = booking_df['Start Date'].dt.to_period('Q').astype(str)
+                        elif freq_map[date_level] == 'Y':
+                            # Yearly - use year
+                            booking_df['Period'] = booking_df['Start Date'].dt.year.astype(str)
+                        else:
+                            # Default to daily
+                            booking_df['Period'] = booking_df['Start Date'].dt.date
                         
                         if 'Business' in booking_df.columns:
                             # Group by business and period
                             business_counts = booking_df.groupby(['Business', 'Period']).size().reset_index(name='Count')
-                            business_counts['Period'] = business_counts['Period'].astype(str)
                             
                             # Create booking date by business graph
                             fig_business = px.line(
@@ -957,7 +1014,6 @@ def render_dashboard_tab(active_subtab):
                         
                         # Overall booking date trends
                         booking_counts = booking_df.groupby('Period').size().reset_index(name='Count')
-                        booking_counts['Period'] = booking_counts['Period'].astype(str)
                         
                         fig_booking = px.bar(
                             booking_counts, 
