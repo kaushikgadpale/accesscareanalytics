@@ -873,10 +873,10 @@ def create_pnl_dashboard(df):
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Add detailed analysis button
-        if st.button("Get Detailed CEO Analysis"):
+        if st.button("Get Detailed Analysis"):
             st.markdown("""
-            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 20px;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📊 CEO Financial Analysis Report</h3>
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <h3 style="color: #2c3e50; margin-top: 0; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px;">📊 Financial Analysis Report</h3>
             """, unsafe_allow_html=True)
 
             # 1. Overall Financial Health
@@ -888,11 +888,26 @@ def create_pnl_dashboard(df):
 
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Total Revenue", f"${total_revenue:,.2f}")
+                st.markdown(f"""
+                <div style="background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Total Revenue</h4>
+                    <p style="color: #1f2937; margin: 0; font-size: 1.5rem; font-weight: 600;">${total_revenue:,.2f}</p>
+                </div>
+                """, unsafe_allow_html=True)
             with col2:
-                st.metric("Total Expenses", f"${total_expenses:,.2f}")
+                st.markdown(f"""
+                <div style="background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Total Expenses</h4>
+                    <p style="color: #1f2937; margin: 0; font-size: 1.5rem; font-weight: 600;">${total_expenses:,.2f}</p>
+                </div>
+                """, unsafe_allow_html=True)
             with col3:
-                st.metric("Overall Profit Margin", f"{overall_margin:.1%}")
+                st.markdown(f"""
+                <div style="background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Overall Profit Margin</h4>
+                    <p style="color: #1f2937; margin: 0; font-size: 1.5rem; font-weight: 600;">{overall_margin:.1%}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
             # 2. Client Portfolio Analysis
             st.markdown("### 2. Client Portfolio Analysis")
@@ -912,10 +927,14 @@ def create_pnl_dashboard(df):
             st.markdown("#### Top 5 Clients by Revenue")
             for _, client in client_metrics.head().iterrows():
                 st.markdown(f"""
-                - **{client['Client']}**
-                    - Revenue: ${client['Revenue_Total']:,.2f} ({client['Revenue_Share']:.1%} of total)
-                    - Profit: ${client['Net_Profit']:,.2f} ({client['Profit_Margin']:.1%} margin)
-                """)
+                <div style="background-color: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <h4 style="color: #1f2937; margin: 0 0 10px 0;">{client['Client']}</h4>
+                    <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 0.9rem;">
+                        <span>Revenue: ${client['Revenue_Total']:,.2f} ({client['Revenue_Share']:.1%} of total)</span>
+                        <span>Profit: ${client['Net_Profit']:,.2f} ({client['Profit_Margin']:.1%} margin)</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             # 3. Revenue Stream Analysis
             st.markdown("### 3. Revenue Stream Analysis")
@@ -933,7 +952,15 @@ def create_pnl_dashboard(df):
             
             st.markdown("#### Revenue Distribution by Stream")
             for stream, (amount, percentage) in revenue_streams.items():
-                st.markdown(f"- **{stream}**: ${amount:,.2f} ({percentage:.1%} of total)")
+                st.markdown(f"""
+                <div style="background-color: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h4 style="color: #1f2937; margin: 0;">{stream}</h4>
+                        <span style="color: #6b7280; font-size: 0.9rem;">{percentage:.1%} of total</span>
+                    </div>
+                    <p style="color: #1f2937; margin: 10px 0 0 0; font-size: 1.2rem; font-weight: 600;">${amount:,.2f}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
             # 4. Trend Analysis
             st.markdown("### 4. Trend Analysis")
@@ -956,12 +983,25 @@ def create_pnl_dashboard(df):
                 
                 st.markdown("#### Latest Month Performance")
                 st.markdown(f"""
-                - Revenue: ${latest_month['Revenue_Total']:,.2f} 
-                    {f"({latest_month['Revenue_Change']:.1%} vs previous month)" if previous_month is not None else ""}
-                - Profit: ${latest_month['Net_Profit']:,.2f}
-                    {f"({latest_month['Profit_Change']:.1%} vs previous month)" if previous_month is not None else ""}
-                - Profit Margin: {latest_month['Profit_Margin']:.1%}
-                """)
+                <div style="background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
+                        <div>
+                            <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Revenue</h4>
+                            <p style="color: #1f2937; margin: 0; font-size: 1.2rem; font-weight: 600;">${latest_month['Revenue_Total']:,.2f}</p>
+                            {f"<p style='color: #10b981; margin: 5px 0 0 0; font-size: 0.9rem;'>↑ {latest_month['Revenue_Change']:.1%} vs previous month</p>" if previous_month is not None else ""}
+                        </div>
+                        <div>
+                            <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Profit</h4>
+                            <p style="color: #1f2937; margin: 0; font-size: 1.2rem; font-weight: 600;">${latest_month['Net_Profit']:,.2f}</p>
+                            {f"<p style='color: #10b981; margin: 5px 0 0 0; font-size: 0.9rem;'>↑ {latest_month['Profit_Change']:.1%} vs previous month</p>" if previous_month is not None else ""}
+                        </div>
+                        <div>
+                            <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Profit Margin</h4>
+                            <p style="color: #1f2937; margin: 0; font-size: 1.2rem; font-weight: 600;">{latest_month['Profit_Margin']:.1%}</p>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             # 5. Recommendations
             st.markdown("### 5. Strategic Recommendations")
@@ -970,29 +1010,32 @@ def create_pnl_dashboard(df):
             top_3_revenue_share = client_metrics.head(3)['Revenue_Share'].sum()
             if top_3_revenue_share > 0.5:
                 st.markdown("""
-                ⚠️ **Client Concentration Risk**
-                - Top 3 clients account for more than 50% of revenue
-                - Consider diversifying client base to reduce dependency
-                """)
+                <div style="background-color: #fff7ed; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #f59e0b;">
+                    <h4 style="color: #92400e; margin: 0 0 10px 0;">⚠️ Client Concentration Risk</h4>
+                    <p style="color: #78350f; margin: 0;">Top 3 clients account for more than 50% of revenue. Consider diversifying client base to reduce dependency.</p>
+                </div>
+                """, unsafe_allow_html=True)
             
             # Analyze profit margins
             low_margin_clients = client_metrics[client_metrics['Profit_Margin'] < 0.1]
             if not low_margin_clients.empty:
                 st.markdown("""
-                💡 **Margin Improvement Opportunities**
-                - Several clients show low profit margins
-                - Consider reviewing pricing strategy or cost structure
-                """)
+                <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #10b981;">
+                    <h4 style="color: #065f46; margin: 0 0 10px 0;">💡 Margin Improvement Opportunities</h4>
+                    <p style="color: #064e3b; margin: 0;">Several clients show low profit margins. Consider reviewing pricing strategy or cost structure.</p>
+                </div>
+                """, unsafe_allow_html=True)
             
             # Analyze revenue streams
             if revenue_streams:
                 dominant_stream = max(revenue_streams.items(), key=lambda x: x[1][1])
                 if dominant_stream[1][1] > 0.4:
                     st.markdown(f"""
-                    🔄 **Revenue Stream Diversification**
-                    - {dominant_stream[0]} accounts for more than 40% of revenue
-                    - Consider expanding other revenue streams
-                    """)
+                    <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #3b82f6;">
+                        <h4 style="color: #1e40af; margin: 0 0 10px 0;">🔄 Revenue Stream Diversification</h4>
+                        <p style="color: #1e3a8a; margin: 0;">{dominant_stream[0]} accounts for more than 40% of revenue. Consider expanding other revenue streams.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
     

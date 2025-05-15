@@ -3,12 +3,12 @@
 /* Global Styles */
 .stApp {
     background-color: #ffffff;
-    color: #333333;
+    color: #1a1a1a;
 }
 
 /* Main header styling */
 h1, h2, h3, h4, h5, h6 {
-    color: #1f2937 !important;
+    color: #404040 !important;
     font-family: 'Inter', 'Segoe UI', sans-serif;
     font-weight: 600;
 }
@@ -20,7 +20,7 @@ h1, h2, h3, h4, h5, h6 {
     padding: 1.5rem;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     margin-bottom: 1.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #e5e5e5;
 }
 
 /* Metric card styling */
@@ -32,18 +32,18 @@ h1, h2, h3, h4, h5, h6 {
 .metric-value {
     font-size: 2.5rem;
     font-weight: 700;
-    color: #7c3aed;
+    color: #404040;
 }
 
 .metric-label {
     font-size: 1rem;
-    color: #6b7280;
+    color: #666666;
     opacity: 0.8;
 }
 
 /* Custom tabs styling */
 .custom-tab {
-    background-color: #f3f4f6;
+    background-color: #f2f2f2;
     border-radius: 8px 8px 0 0;
     padding: 0.75rem 1.25rem;
     font-weight: 500;
@@ -53,17 +53,17 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .custom-tab:hover {
-    background-color: #e5e7eb;
+    background-color: #e5e5e5;
 }
 
 .custom-tab.active {
-    border-bottom-color: #7c3aed;
-    background-color: #e5e7eb;
+    border-bottom-color: #404040;
+    background-color: #e5e5e5;
 }
 
 /* Button styling */
 .stButton>button {
-    background-color: #1f2937 !important;
+    background-color: #404040 !important;
     color: white !important;
     border: none !important;
     border-radius: 6px !important;
@@ -72,28 +72,28 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .stButton>button:hover {
-    background-color: #374151 !important;
+    background-color: #666666 !important;
     color: white !important;
 }
 
-/* Sidebar button styling - specifically target sidebar buttons */
+/* Sidebar button styling */
 .stSidebar .stButton>button {
     background-color: transparent !important;
-    color: #1f2937 !important;
-    border: 1px solid #e5e7eb !important;
+    color: #404040 !important;
+    border: 1px solid #e5e5e5 !important;
     text-align: left !important;
     font-weight: 500 !important;
 }
 
 .stSidebar .stButton>button:hover {
-    background-color: #f3f4f6 !important;
-    border-color: #d1d5db !important;
+    background-color: #f2f2f2 !important;
+    border-color: #d1d1d1 !important;
 }
 
-/* Tab Button styling - specifically target buttons used as tabs */
+/* Tab Button styling */
 [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
-    background-color: #f3f4f6 !important;
-    color: #1f2937 !important;
+    background-color: #f2f2f2 !important;
+    color: #404040 !important;
     border-radius: 8px 8px 0 0 !important;
     border-bottom: 3px solid transparent !important;
     font-weight: 500 !important;
@@ -103,61 +103,61 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]):hover {
-    background-color: #e5e7eb !important;
-    border-bottom: 3px solid #7c3aed !important;
+    background-color: #e5e5e5 !important;
+    border-bottom: 3px solid #404040 !important;
 }
 
-/* Style for active tab - will need JavaScript to toggle this, but adding for completeness */
+/* Active tab styling */
 [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"].active:has(+ div[aria-label*="Switch to"]) {
-    background-color: #e5e7eb !important;
-    border-bottom: 3px solid #7c3aed !important;
+    background-color: #e5e5e5 !important;
+    border-bottom: 3px solid #404040 !important;
 }
 
 /* Subtabs container and styling */
 .subtabs-container {
-    margin-top: -20px; /* Reduce the gap between main tabs and subtabs */
+    margin-top: -20px;
     margin-bottom: 20px;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid #e5e5e5;
     padding-top: 10px;
 }
 
-/* Make subtab buttons smaller and less prominent */
+/* Subtabs styling */
 .subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
-    background-color: #f8fafc !important;
+    background-color: #f8f8f8 !important;
     font-size: 0.85rem !important;
     padding: 8px 12px !important;
-    border-radius: 6px !important; /* More rounded for subtabs */
+    border-radius: 6px !important;
     margin-right: 5px !important;
-    border: 1px solid #e5e7eb !important;
+    border: 1px solid #e5e5e5 !important;
     border-bottom: 2px solid transparent !important;
 }
 
 .subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]):hover {
-    background-color: #f1f5f9 !important;
-    border-bottom: 2px solid #7c3aed !important; /* Different color for subtabs */
+    background-color: #f1f1f1 !important;
+    border-bottom: 2px solid #404040 !important;
 }
 
 /* Input field styling */
 .stTextInput>div>div>input, 
 .stNumberInput>div>div>input,
 .stDateInput>div>div>input {
-    background-color: #f8fafc !important;
-    color: #333333 !important;
-    border: 1px solid #e5e7eb !important;
+    background-color: #f8f8f8 !important;
+    color: #1a1a1a !important;
+    border: 1px solid #e5e5e5 !important;
     border-radius: 6px !important;
 }
 
 /* Selectbox styling */
 .stSelectbox>div>div>div {
-    background-color: #f8fafc !important;
-    color: #333333 !important;
-    border: 1px solid #e5e7eb !important;
+    background-color: #f8f8f8 !important;
+    color: #1a1a1a !important;
+    border: 1px solid #e5e5e5 !important;
     border-radius: 6px !important;
 }
 
 /* Sidebar styling */
 .css-1d391kg, .css-12oz5g7 {
-    background-color: #f8fafc !important;
+    background-color: #f8f8f8 !important;
 }
 
 /* Hide Streamlit branding */
@@ -167,24 +167,24 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Custom info boxes */
 .info-box {
-    background-color: #f0f9ff;
-    border-left: 4px solid #3b82f6;
+    background-color: #f2f2f2;
+    border-left: 4px solid #404040;
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 0 8px 8px 0;
 }
 
 .warning-box {
-    background-color: #fffbeb;
-    border-left: 4px solid #f59e0b;
+    background-color: #f2f2f2;
+    border-left: 4px solid #666666;
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 0 8px 8px 0;
 }
 
 .error-box {
-    background-color: #fee2e2;
-    border-left: 4px solid #ef4444;
+    background-color: #f2f2f2;
+    border-left: 4px solid #333333;
     padding: 1rem;
     margin-bottom: 1rem;
     border-radius: 0 8px 8px 0;
@@ -194,19 +194,19 @@ h1, h2, h3, h4, h5, h6 {
 .empty-state {
     text-align: center;
     padding: 3rem 1rem;
-    background-color: #f8fafc;
+    background-color: #f8f8f8;
     border-radius: 8px;
     margin-bottom: 1.5rem;
 }
 
 .empty-state-icon {
     font-size: 3rem;
-    color: #e5e7eb;
+    color: #e5e5e5;
     margin-bottom: 1rem;
 }
 
 .empty-state-text {
-    color: #6b7280;
+    color: #666666;
     opacity: 0.7;
     font-size: 1.1rem;
 }
@@ -224,13 +224,13 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .app-title {
-    color: #1f2937 !important;
+    color: #404040 !important;
     margin: 0;
     font-size: 1.8rem;
 }
 
 .app-subtitle {
-    color: #6b7280;
+    color: #666666;
     margin: 0;
     font-size: 1rem;
 }
@@ -245,17 +245,17 @@ h1, h2, h3, h4, h5, h6 {
 /* Table styling */
 .dataframe {
     background-color: #ffffff !important;
-    color: #333333 !important;
+    color: #1a1a1a !important;
 }
 
 .dataframe th {
-    background-color: #f3f4f6 !important;
-    color: #1f2937 !important;
-    border-color: #e5e7eb !important;
+    background-color: #f2f2f2 !important;
+    color: #404040 !important;
+    border-color: #e5e5e5 !important;
 }
 
 .dataframe td {
-    border-color: #e5e7eb !important;
+    border-color: #e5e5e5 !important;
 }
 
 /* Custom dashboard layout helpers */
@@ -299,7 +299,7 @@ h1, h2, h3, h4, h5, h6 {
     padding: 0.5rem !important;
 }
 
-/* Fix for tooltip hover - remove it as requested */
+/* Fix for tooltip hover */
 [data-testid="stTooltip"] {
     display: none !important;
 } 
