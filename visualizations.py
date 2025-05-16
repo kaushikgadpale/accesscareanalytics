@@ -195,7 +195,7 @@ def create_booking_trends(df):
     
     # Monthly booking counts
     monthly_bookings = df.groupby(
-        [pd.Grouper(key="Start Date", freq="M"), "Status"]
+        [pd.Grouper(key="Start Date", freq="ME"), "Status"]
     ).size().reset_index(name="Count")
     
     # Visualizations
@@ -236,7 +236,7 @@ def create_booking_trends(df):
     # Business-wise growth
     st.write("### Business Growth Analysis")
     business_growth = df.groupby(
-        [pd.Grouper(key="Start Date", freq="M"), "Business"]
+        [pd.Grouper(key="Start Date", freq="ME"), "Business"]
     ).size().reset_index(name="Bookings")
     
     fig_growth = px.line(

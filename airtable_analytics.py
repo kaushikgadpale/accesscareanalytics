@@ -3,709 +3,16 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import requests
 from datetime import datetime, timedelta
 import json
 from config import AIRTABLE_BASES, AIRTABLE_CONFIG, THEME_CONFIG
 
-def fetch_from_airtable(base_key, query_params=None):
-    """
-    Fetch data from a specific Airtable base defined in AIRTABLE_BASES
-    
-    Args:
-        base_key: Key of the base in AIRTABLE_BASES (e.g., 'SOW', 'UTILIZATION', 'PNL')
-        query_params: Dictionary of query parameters to include in the request
-        
-    Returns:
-        Dictionary containing the API response
-    """
-    if base_key not in AIRTABLE_BASES:
-        st.error(f"Base key '{base_key}' not found in AIRTABLE_BASES")
-        return None
-        
-    base_info = AIRTABLE_BASES[base_key]
-    base_id = base_info['BASE_ID']
-    table_id = base_info['TABLE_ID']
-    
-    # Get API credentials
-    api_key = st.session_state.get('airtable_api_key', AIRTABLE_CONFIG['API_KEY'])
-    
-    if not api_key or not base_id:
-        st.error("Airtable credentials not configured. Please set them up in the integration settings.")
-        return None
-    
-    # Prepare headers
-    headers = {
-        'Authorization': f'Bearer {api_key}',
-        'Content-Type': 'application/json'
-    }
-    
-    # Create URL
-    url = f"{AIRTABLE_CONFIG['API_URL']}/{base_id}/{table_id}"
-    
-    # Add query parameters if provided
-    params = query_params or {}
-    
-    # Set a higher record limit (default to 1000 instead of 100)
-    if 'maxRecords' not in params:
-        params['maxRecords'] = 1000
-    
-    # Hide debug information in collapsed expander
-    with st.expander(f"Debug Info for {base_key} API Request", expanded=False):
-        st.write(f"URL: {url}")
-        st.write(f"Headers: Authorization: Bearer ...{api_key[-5:]}")
-        st.write(f"Query Parameters: {params}")
-    
-    try:
-        # Show a loading spinner instead of multiple info messages
-        with st.spinner(f"Fetching data from Airtable {base_key} base..."):
-            # Initialize records list and offset
-            all_records = []
-            offset = None
-            page = 1
-            
-            # Use pagination to fetch all records
-            while True:
-                # Add offset to params if we have one
-                if offset:
-                    params['offset'] = offset
-                
-                # Make the request
-                response = requests.get(url, headers=headers, params=params)
-                
-                # Check if the request was successful
-                if response.status_code == 200:
-                    data = response.json()
-                    
-                    # Add records to our list
-                    if 'records' in data:
-                        all_records.extend(data['records'])
-                        # Don't show individual page fetch messages
-                        # st.success(f"Fetched page {page} with {len(data.get('records', []))} records")
-                        
-                        # Check if there are more records
-                        if 'offset' in data:
-                            offset = data['offset']
-                            page += 1
-                        else:
-                            # No more records
-                            break
-                    else:
-                        # No records in response
-                        break
-                else:
-                    st.error(f"Error fetching data from Airtable: Status code {response.status_code}")
-                    st.error(f"Response: {response.text}")
-                    return None
-        
-        # Create a complete response with all records
-        complete_response = {'records': all_records}
-        # Only show a single success message with the total
-        st.success(f"Successfully fetched {len(all_records)} records from {base_key}")
-        return complete_response
-        
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error fetching data from Airtable: {str(e)}")
-        return None
+# Import from modular structure
+from modules.airtable import get_utilization_data, get_pnl_data, get_sow_data
+from modules.utils import apply_filters
+from modules.visualization import create_utilization_dashboard
 
-def airtable_to_dataframe(airtable_data):
-    """Convert Airtable API response to a Pandas DataFrame"""
-    if not airtable_data or 'records' not in airtable_data:
-        return pd.DataFrame()
-    
-    records = []
-    for record in airtable_data['records']:
-        row = record['fields'].copy()
-        row['id'] = record['id']
-        records.append(row)
-    
-    return pd.DataFrame(records)
-
-def apply_filters(df, filters):
-    """
-    Apply filters to a DataFrame based on filter parameters
-    
-    Args:
-        df: DataFrame to filter
-        filters: Dictionary of filter parameters
-        
-    Returns:
-        Filtered DataFrame
-    """
-    filtered_df = df.copy()
-    
-    if not filters or df.empty:
-        return filtered_df
-    
-    # Apply column filters
-    for column, value in filters.items():
-        if column in filtered_df.columns and value:
-            if isinstance(value, list):
-                if value and value[0] != "All":  # Skip if "All" is selected
-                    filtered_df = filtered_df[filtered_df[column].isin(value)]
-            elif isinstance(value, tuple) and len(value) == 2:  # Date range
-                start_date, end_date = value
-                if pd.api.types.is_datetime64_dtype(filtered_df[column]):
-                    filtered_df = filtered_df[(filtered_df[column] >= start_date) & 
-                                             (filtered_df[column] <= end_date)]
-            elif isinstance(value, str) and value.lower() != "all":
-                # Case-insensitive text search
-                filtered_df = filtered_df[filtered_df[column].astype(str).str.contains(value, case=False, na=False)]
-    
-    return filtered_df
-
-def get_utilization_data(filters=None):
-    """
-    Get utilization data from Airtable and process it
-    
-    Args:
-        filters: Dictionary of filtering options
-        
-    Returns:
-        Processed DataFrame with utilization data
-    """
-    # Create query parameters based on filters
-    params = {'maxRecords': 1000}  # Default to 1000 records max
-    
-    if filters:
-        # Example: Add view filtering or formula filtering
-        if 'year' in filters:
-            params['filterByFormula'] = f"{{Year}}='{filters['year']}'"
-    
-    # Fetch data from Airtable
-    utilization_data = fetch_from_airtable('UTILIZATION', params)
-    
-    if not utilization_data:
-        return pd.DataFrame()
-    
-    # Convert to DataFrame
-    df = airtable_to_dataframe(utilization_data)
-    
-    # Process the DataFrame
-    if not df.empty:
-        # Create debug expander for field mapping info
-        with st.expander("Field Mapping Details", expanded=False):
-            st.write("Mapping fields for Utilization data:")
-            
-            # Map field IDs to readable names if present
-            field_mapping = AIRTABLE_BASES['UTILIZATION'].get('FIELDS', {})
-            field_map_inverted = {v: k for k, v in field_mapping.items()}
-            
-            # Rename columns using the field mapping
-            df = df.rename(columns=field_map_inverted)
-            
-            # If we don't have mappings for some key fields, try to use common names
-            required_fields = [
-                'CLIENT', 'SITE', 'DATE_OF_SERVICE', 'YEAR', 'HEADCOUNT', 
-                'TOTAL_BOOKING_APPTS', 'TOTAL_COMPLETED_APPTS'
-            ]
-            
-            for field in required_fields:
-                if field not in df.columns:
-                    # Try some common alternatives
-                    alternatives = {
-                        'CLIENT': ['Client', 'client', 'Company', 'company', 'Organization'],
-                        'SITE': ['Site', 'site', 'Location', 'location'],
-                        'DATE_OF_SERVICE': ['Date of Service', 'date_of_service', 'Service Date', 'DOS'],
-                        'YEAR': ['Year', 'year', 'Calendar Year'],
-                        'HEADCOUNT': ['Headcount', 'headcount', 'Head Count', 'Employee Count'],
-                        'TOTAL_BOOKING_APPTS': ['Total Booking Appts', 'Bookings', 'Appointments Booked'],
-                        'TOTAL_COMPLETED_APPTS': ['Total Completed Appts', 'Completed', 'Completed Appointments']
-                    }
-                    
-                    # Try to find a matching column
-                    found = False
-                    for alt in alternatives.get(field, []):
-                        if alt in df.columns:
-                            df[field] = df[alt]
-                            found = True
-                            st.write(f"Found alternative for '{field}': '{alt}'")
-                            break
-                    
-                    if not found:
-                        st.warning(f"Could not find a mapping for required field '{field}'")
-        
-        # Convert date fields
-        date_fields = ['DATE_OF_SERVICE', 'Date of Service']
-        for field in date_fields:
-            if field in df.columns:
-                df[field] = pd.to_datetime(df[field], errors='coerce')
-        
-        # Convert numeric fields
-        numeric_fields = [
-            'HEADCOUNT', 'WALKINS', 'INTERESTED_PATIENTS',
-            'TOTAL_BOOKING_APPTS', 'TOTAL_COMPLETED_APPTS',
-            'DENTAL', 'AUDIOLOGY', 'VISION', 'MSK', 
-            'SKIN_SCREENING', 'BIOMETRICS_AND_LABS',
-            'Headcount', 'Walkins', 'Interested Patients',
-            'Total Booking Appts', 'Total Completed Appts',
-            'Dental', 'Audiology', 'Vision', 'MSK', 
-            'Skin Screening', 'Biometrics and Labs'
-        ]
-        
-        for field in numeric_fields:
-            if field in df.columns:
-                df[field] = pd.to_numeric(df[field], errors='coerce')
-        
-        # Calculate additional metrics - try with both potential field names
-        booking_rate_fields = [
-            ('TOTAL_BOOKING_APPTS', 'HEADCOUNT'),
-            ('Total Booking Appts', 'Headcount')
-        ]
-        
-        for booking_field, headcount_field in booking_rate_fields:
-            if booking_field in df.columns and headcount_field in df.columns:
-                df['Booking Rate'] = (df[booking_field] / df[headcount_field]).fillna(0)
-                break
-        
-        show_rate_fields = [
-            ('TOTAL_COMPLETED_APPTS', 'TOTAL_BOOKING_APPTS'),
-            ('Total Completed Appts', 'Total Booking Appts')
-        ]
-        
-        for completed_field, booking_field in show_rate_fields:
-            if completed_field in df.columns and booking_field in df.columns:
-                df['Show Rate'] = (df[completed_field] / df[booking_field]).fillna(0)
-                break
-        
-        utilization_rate_fields = [
-            ('TOTAL_COMPLETED_APPTS', 'HEADCOUNT'),
-            ('Total Completed Appts', 'Headcount')
-        ]
-        
-        for completed_field, headcount_field in utilization_rate_fields:
-            if completed_field in df.columns and headcount_field in df.columns:
-                df['Utilization Rate'] = (df[completed_field] / df[headcount_field]).fillna(0)
-                break
-    
-    return df
-
-def get_pnl_data(filters=None):
-    """
-    Get PnL data from Airtable and process it
-    
-    Args:
-        filters: Dictionary of filtering options
-        
-    Returns:
-        Processed DataFrame with PnL data
-    """
-    # Create query parameters based on filters
-    params = {'maxRecords': 1000}  # Default to 1000 records max
-    
-    if filters:
-        if 'client' in filters:
-            params['filterByFormula'] = f"FIND('{filters['client']}', {{Client}})"
-    
-    # Fetch data from Airtable
-    pnl_data = fetch_from_airtable('PNL', params)
-    
-    if not pnl_data:
-        return pd.DataFrame()
-    
-    # Convert to DataFrame
-    df = airtable_to_dataframe(pnl_data)
-    
-    # Print column names for debugging
-    print("Actual PnL Data Columns:", df.columns.tolist())
-    
-    # Process the DataFrame
-    if not df.empty:
-        # Create debug expander for field mapping info
-        with st.expander("Field Mapping Details", expanded=False):
-            st.write("Mapping fields for PnL data:")
-            
-            # Map field IDs to readable names if present
-            field_mapping = AIRTABLE_BASES['PNL'].get('FIELDS', {})
-            field_map_inverted = {v: k for k, v in field_mapping.items()}
-            
-            # Rename columns using the field mapping
-            df = df.rename(columns=field_map_inverted)
-            
-            # Define required fields and alternatives with expanded potential column names
-            required_fields = [
-                'CLIENT', 'SITE_LOCATION', 'SERVICE_MONTH', 'REVENUE_TOTAL', 
-                'EXPENSE_COGS_TOTAL', 'NET_PROFIT'
-            ]
-            
-            for field in required_fields:
-                if field not in df.columns:
-                    # Try some common alternatives
-                    alternatives = {
-                        'CLIENT': ['Client', 'client', 'Company', 'company', 'Organization', 'Client Name'],
-                        'SITE_LOCATION': ['Site Location', 'Site_Location', 'Location', 'location', 'Site', 'Event Location'],
-                        'SERVICE_MONTH': ['Service Month', 'Month', 'Date', 'Service_Month', 'Service Date', 'Event Date'],
-                        'REVENUE_TOTAL': ['Revenue Total', 'Total Revenue', 'Revenue', 'Revenue_Total', 'Gross Revenue'],
-                        'EXPENSE_COGS_TOTAL': ['Expense COGS Total', 'Total Expenses', 'Expenses', 'Expense_COGS_Total', 'COGS', 'Cost of Goods Sold'],
-                        'NET_PROFIT': ['Net Profit', 'Profit', 'Net Income', 'Net_Profit', 'Margin', 'Earnings']
-                    }
-                    
-                    # Try to find a matching column
-                    found = False
-                    for alt in alternatives.get(field, []):
-                        if alt in df.columns:
-                            df[field] = df[alt]
-                            found = True
-                            st.write(f"Found alternative for '{field}': '{alt}'")
-                            break
-                    
-                    if not found:
-                        # Try to find a column that contains the field name as a substring
-                        for col in df.columns:
-                            if any(alt.lower() in col.lower() for alt in alternatives.get(field, [])):
-                                df[field] = df[col]
-                                found = True
-                                st.write(f"Found column containing '{field}' in name: '{col}'")
-                                break
-                    
-                    if not found:
-                        st.warning(f"Could not find a mapping for required field '{field}'")
-        
-        # Convert date fields - try multiple potential names
-        date_fields = ['SERVICE_MONTH', 'Service_Month', 'Service Month', 'Month', 'LAST_MODIFIED', 'Last Modified']
-        for field in date_fields:
-            if field in df.columns:
-                df[field] = pd.to_datetime(df[field], errors='coerce')
-        
-        # Convert numeric fields - try multiple potential names
-        currency_fields = [
-            'REVENUE_WELLNESS_FUND', 'REVENUE_DENTAL_CLAIM', 'REVENUE_MEDICAL_CLAIM',
-            'REVENUE_EVENT_TOTAL', 'REVENUE_MISSED_APPOINTMENTS', 'REVENUE_TOTAL',
-            'REVENUE_PER_DAY_AVG', 'EXPENSE_COGS_TOTAL', 'EXPENSE_COGS_PER_DAY_AVG', 
-            'NET_PROFIT', 'Revenue_WellnessFund', 'Revenue_DentalClaim',
-            'Revenue_MedicalClaim_InclCancelled', 'Revenue_EventTotal',
-            'Revenue_MissedAppointments', 'Revenue_Total', 'Revenue_PerDay_Avg',
-            'Expense_COGS_Total', 'Expense_COGS_PerDay_Avg', 'Net_Profit'
-        ]
-        
-        for field in currency_fields:
-            if field in df.columns:
-                df[field] = pd.to_numeric(df[field], errors='coerce')
-        
-        # Convert percentage fields
-        percentage_fields = ['NET_PROFIT_PERCENT', 'Net_Profit_%', 'Profit Margin', 'Margin']
-        for field in percentage_fields:
-            if field in df.columns:
-                df[field] = pd.to_numeric(df[field], errors='coerce')
-    
-    return df
-
-def get_sow_data(filters=None):
-    """
-    Get SOW data from Airtable and process it
-    
-    Args:
-        filters: Dictionary of filtering options
-        
-    Returns:
-        Processed DataFrame with SOW data
-    """
-    # Create query parameters based on filters
-    params = {'maxRecords': 1000}  # Default to 1000 records max
-    
-    if filters:
-        filter_formulas = []
-        
-        # Add client filter
-        if 'client' in filters and filters['client']:
-            filter_formulas.append(f"FIND('{filters['client']}', {{ClientCompanyName}})")
-        
-        # Add project filter
-        if 'project' in filters and filters['project']:
-            filter_formulas.append(f"{{ProjectName}}='{filters['project']}'")
-            
-        # Combine filter formulas with AND if multiple exist
-        if filter_formulas:
-            if len(filter_formulas) == 1:
-                params['filterByFormula'] = filter_formulas[0]
-            else:
-                params['filterByFormula'] = f"AND({','.join(filter_formulas)})"
-    
-    # Fetch data from Airtable
-    sow_data = fetch_from_airtable('SOW', params)
-    
-    if not sow_data:
-        return pd.DataFrame()
-    
-    # Convert to DataFrame
-    df = airtable_to_dataframe(sow_data)
-    
-    # Process the DataFrame
-    if not df.empty:
-        # Create debug expander for field mapping info
-        with st.expander("Field Mapping Details", expanded=False):
-            st.write("Mapping fields for SOW data:")
-            
-            # Map field IDs to readable names if present
-            field_mapping = AIRTABLE_BASES['SOW'].get('FIELDS', {})
-            field_map_inverted = {v: k for k, v in field_mapping.items()}
-            
-            # Rename columns using the field mapping
-            df = df.rename(columns=field_map_inverted)
-            
-            # Define required fields and alternatives with expanded potential column names
-            required_fields = [
-                'ClientCompanyName', 'ProjectName', 'SOWQuoteNumber', 
-                'ScheduledPlanningStartDate', 'ScheduledEndDate'
-            ]
-            
-            for field in required_fields:
-                if field not in df.columns:
-                    st.warning(f"Could not find required field '{field}'")
-        
-        # Convert date fields
-        date_fields = [
-            'ScheduledPlanningStartDate', 'ScheduledEndDate', 
-            'ActualPlanningStartDate', 'ActualEndDate'
-        ]
-        
-        for field in date_fields:
-            if field in df.columns:
-                df[field] = pd.to_datetime(df[field], errors='coerce')
-    
-    return df
-
-def create_utilization_dashboard(df):
-    """
-    Create visualizations for utilization data
-    
-    Args:
-        df: DataFrame containing utilization data
-        
-    Returns:
-        None (displays visualizations in Streamlit)
-    """
-    if df.empty:
-        st.warning("No utilization data available to display")
-        return
-    
-    st.subheader("Utilization Overview")
-    
-    # Add descriptive text
-    st.markdown("""
-    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-        <h4 style="margin-top: 0;">📈 Utilization Dashboard</h4>
-        <p>This dashboard provides insights into appointment utilization metrics across different clients and sites. 
-        Key metrics include booking rates, show rates, and overall utilization rates.</p>
-        <p><strong>Definitions:</strong></p>
-        <ul>
-            <li><strong>Booking Rate</strong>: Percentage of eligible employees who booked appointments</li>
-            <li><strong>Show Rate</strong>: Percentage of booked appointments that were completed</li>
-            <li><strong>Utilization Rate</strong>: Percentage of eligible employees who completed appointments</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Summary statistics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        total_clients = df['Client'].nunique()
-        st.metric("Total Clients", total_clients)
-    
-    with col2:
-        total_sites = df['Site'].nunique()
-        st.metric("Total Sites", total_sites)
-    
-    with col3:
-        total_headcount = df['Headcount'].sum() if 'Headcount' in df.columns else 0
-        st.metric("Total Headcount", f"{total_headcount:,}")
-    
-    with col4:
-        total_appointments = df['Total Completed Appts'].sum() if 'Total Completed Appts' in df.columns else 0
-        st.metric("Total Completed Appointments", f"{total_appointments:,}")
-    
-    # Utilization rates
-    st.subheader("Utilization Rates")
-    
-    # Add explanation for utilization rates
-    st.markdown("""
-    <div style="background-color: #e8f4f8; padding: 10px; border-left: 4px solid #4dabf7; border-radius: 3px; margin-bottom: 15px;">
-        These metrics show the overall effectiveness of appointment booking and completion across all clients.
-        Higher rates indicate better engagement and service utilization.
-    </div>
-    """, unsafe_allow_html=True)
-    
-    rates_col1, rates_col2, rates_col3 = st.columns(3)
-    
-    with rates_col1:
-        avg_booking_rate = df['Booking Rate'].mean() if 'Booking Rate' in df.columns else 0
-        st.metric("Avg. Booking Rate", f"{avg_booking_rate:.1%}")
-    
-    with rates_col2:
-        avg_show_rate = df['Show Rate'].mean() if 'Show Rate' in df.columns else 0
-        st.metric("Avg. Show Rate", f"{avg_show_rate:.1%}")
-    
-    with rates_col3:
-        avg_utilization = df['Utilization Rate'].mean() if 'Utilization Rate' in df.columns else 0
-        st.metric("Avg. Utilization Rate", f"{avg_utilization:.1%}")
-    
-    # Service distribution
-    service_cols = ['Dental', 'Audiology', 'Vision', 'MSK', 'Skin Screening', 'Biometrics and Labs']
-    service_cols = [col for col in service_cols if col in df.columns]
-    
-    if service_cols:
-        st.subheader("Service Distribution")
-        
-        # Add explanation for service distribution
-        st.markdown("""
-        <div style="background-color: #f3f0ff; padding: 10px; border-left: 4px solid #7950f2; border-radius: 3px; margin-bottom: 15px;">
-            This chart shows the breakdown of appointments by service type. Use this to identify which services are most utilized 
-            and where there may be opportunities to increase engagement.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        service_totals = df[service_cols].sum().reset_index()
-        service_totals.columns = ['Service', 'Count']
-        service_totals = service_totals[service_totals['Count'] > 0]
-        
-        if not service_totals.empty:
-            fig = px.pie(
-                service_totals,
-                values='Count',
-                names='Service',
-                title='Appointment Distribution by Service Type',
-                color_discrete_sequence=px.colors.qualitative.Set2
-            )
-            
-            fig.update_traces(textposition='inside', textinfo='percent+label')
-            fig.update_layout(
-                margin=dict(t=50, b=50, l=20, r=20),
-                height=400
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Add insights about service distribution
-            top_service = service_totals.sort_values('Count', ascending=False).iloc[0]
-            st.markdown(f"""
-            <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
-                <strong>📊 Insight:</strong> {top_service['Service']} is the most utilized service, accounting for 
-                {(top_service['Count'] / service_totals['Count'].sum()):.1%} of all appointments.
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Client performance
-    if 'Client' in df.columns and 'Utilization Rate' in df.columns:
-        st.subheader("Client Performance")
-        
-        # Add explanation for client performance
-        st.markdown("""
-        <div style="background-color: #e6fcf5; padding: 10px; border-left: 4px solid #12b886; border-radius: 3px; margin-bottom: 15px;">
-            This chart ranks clients by their utilization rate. Higher rates indicate better engagement with the services offered.
-            Focus on strategies that work well with high-performing clients and identify improvement opportunities for others.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        client_performance = df.groupby('Client').agg({
-            'Headcount': 'sum',
-            'Total Booking Appts': 'sum',
-            'Total Completed Appts': 'sum',
-            'Utilization Rate': 'mean'
-        }).reset_index()
-        
-        client_performance['Utilization Rate'] = client_performance['Utilization Rate'] * 100
-        
-        fig = px.bar(
-            client_performance.sort_values('Utilization Rate', ascending=False).head(10),
-            x='Client',
-            y='Utilization Rate',
-            title='Top 10 Clients by Utilization Rate (%)',
-            color='Utilization Rate',
-            color_continuous_scale='Viridis',
-            text_auto='.1f'
-        )
-        
-        fig.update_traces(texttemplate='%{text}%', textposition='outside')
-        fig.update_layout(
-            xaxis_title="Client",
-            yaxis_title="Utilization Rate (%)",
-            yaxis=dict(range=[0, max(client_performance['Utilization Rate']) * 1.1]),
-            margin=dict(t=50, b=100, l=20, r=20),
-            height=450
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Add insights about client performance
-        top_client = client_performance.sort_values('Utilization Rate', ascending=False).iloc[0]
-        bottom_client = client_performance.sort_values('Utilization Rate').iloc[0]
-        
-        st.markdown("""
-        <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
-            <strong>📊 Insights:</strong>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(f"""
-        - Most profitable client: **{top_client['Client']}** with {top_client['Utilization Rate']:.1f}% utilization rate
-        """)
-        
-        if bottom_client is not None:
-            st.markdown(f"""
-            - Opportunity for improvement: **{bottom_client['Client']}** with {bottom_client['Utilization Rate']:.1f}% utilization rate
-            """)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Time series analysis
-    if 'Date of Service' in df.columns and 'Utilization Rate' in df.columns:
-        st.subheader("Time Series Analysis")
-        
-        # Add explanation for time series
-        st.markdown("""
-        <div style="background-color: #fff4e6; padding: 10px; border-left: 4px solid #fd7e14; border-radius: 3px; margin-bottom: 15px;">
-            This chart shows utilization rate trends over time. Use this to identify seasonal patterns, 
-            the impact of promotional campaigns, or other factors affecting utilization rates.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        time_series = df.groupby(pd.Grouper(key='Date of Service', freq='M')).agg({
-            'Headcount': 'sum',
-            'Total Booking Appts': 'sum',
-            'Total Completed Appts': 'sum',
-            'Utilization Rate': 'mean'
-        }).reset_index()
-        
-        time_series['Month'] = time_series['Date of Service'].dt.strftime('%b %Y')
-        time_series['Utilization Rate'] = time_series['Utilization Rate'] * 100
-        
-        fig = px.line(
-            time_series,
-            x='Date of Service',
-            y='Utilization Rate',
-            title='Utilization Rate Trend Over Time',
-            markers=True
-        )
-        
-        fig.update_traces(line=dict(width=3))
-        fig.update_layout(
-            xaxis_title="Month",
-            yaxis_title="Utilization Rate (%)",
-            margin=dict(t=50, b=50, l=20, r=20),
-            height=400
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Add trend analysis
-        if len(time_series) > 1:
-            first_month = time_series.iloc[0]
-            last_month = time_series.iloc[-1]
-            change = last_month['Utilization Rate'] - first_month['Utilization Rate']
-            
-            trend_color = "#12b886" if change >= 0 else "#fa5252"
-            trend_icon = "📈" if change >= 0 else "📉"
-            
-            st.markdown(f"""
-            <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
-                <strong>{trend_icon} Trend Analysis:</strong> Utilization rate has 
-                <span style="color: {trend_color}; font-weight: bold;">
-                    {"increased" if change >= 0 else "decreased"} by {abs(change):.1f}%
-                </span> 
-                from {first_month['Month']} to {last_month['Month']}.
-            </div>
-            """, unsafe_allow_html=True)
-
+# Functions that haven't been modularized yet
 def create_pnl_dashboard(df):
     """
     Create visualizations for PnL data
@@ -892,7 +199,7 @@ def create_pnl_dashboard(df):
                 <div style="background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                     <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Total Revenue</h4>
                     <p style="color: #1f2937; margin: 0; font-size: 1.5rem; font-weight: 600;">${total_revenue:,.2f}</p>
-                </div>
+        </div>
                 """, unsafe_allow_html=True)
             with col2:
                 st.markdown(f"""
@@ -965,7 +272,7 @@ def create_pnl_dashboard(df):
             # 4. Trend Analysis
             st.markdown("### 4. Trend Analysis")
             if 'Service_Month' in df.columns:
-                monthly_trends = df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
+                monthly_trends = df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
                     'Revenue_Total': 'sum',
                     'Expense_COGS_Total': 'sum',
                     'Net_Profit': 'sum'
@@ -1052,7 +359,20 @@ def create_pnl_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
         
-        location_profit = df.explode('Site_Location').groupby('Site_Location').agg({
+        # Debug information for Site_Location
+        with st.expander("Debug Site_Location", expanded=False):
+            st.write("Site_Location values types:", [type(x) for x in df['Site_Location'].head(10)])
+            st.write("First few Site_Location values:", df['Site_Location'].head(10).tolist())
+        
+        # Ensure Site_Location is properly formatted for explode
+        # If it's not already a list type, convert single values to lists
+        df['Site_Location_List'] = df['Site_Location'].apply(
+            lambda x: x if isinstance(x, list) else [str(x) if x is not None else "Unknown"]
+        )
+        
+        # Now safely explode the list column
+        try:
+            location_profit = df.explode('Site_Location_List').groupby('Site_Location_List').agg({
             'Revenue_Total': 'sum',
             'Expense_COGS_Total': 'sum',
             'Net_Profit': 'sum'
@@ -1066,7 +386,7 @@ def create_pnl_dashboard(df):
             y='Net_Profit',
             size='Expense_COGS_Total',
             color='Profit_Margin',
-            hover_name='Site_Location',
+                hover_name='Site_Location_List',
             color_continuous_scale='RdYlGn',
             title='Location Profitability Analysis'
         )
@@ -1099,11 +419,14 @@ def create_pnl_dashboard(df):
         <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
             <strong>📊 Insights:</strong>
             <ul>
-                <li>Most profitable location: <strong>{top_location['Site_Location']}</strong> with ${top_location['Net_Profit']:,.2f} net profit</li>
+                    <li>Most profitable location: <strong>{top_location['Site_Location_List']}</strong> with ${top_location['Net_Profit']:,.2f} net profit</li>
                 <li>{unprofitable_count} locations are currently operating at a loss (below the red dashed line)</li>
             </ul>
         </div>
         """, unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Error processing location data: {str(e)}")
+            st.write("Please check the format of your Site_Location data.")
     
     # Time Series
     if 'Service_Month' in df.columns:
@@ -1117,7 +440,7 @@ def create_pnl_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
         
-        monthly_performance = df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
+        monthly_performance = df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
             'Revenue_Total': 'sum',
             'Expense_COGS_Total': 'sum',
             'Net_Profit': 'sum'
@@ -1506,13 +829,15 @@ def render_analytics_dashboard():
         # Client filter (common across all data types)
         client_filter = None
         if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty and 'Client' in st.session_state.utilization_data.columns:
-            client_options = ["All"] + sorted(st.session_state.utilization_data['Client'].unique().tolist())
-            client_filter = st.selectbox("Client", client_options, 
-                                         index=client_options.index(st.session_state.common_filters.get('Client', 'All')) if st.session_state.common_filters.get('Client', 'All') in client_options else 0)
+            client_options = sorted(st.session_state.utilization_data['Client'].unique().tolist())
+            default_clients = st.session_state.common_filters.get('Client', []) if isinstance(st.session_state.common_filters.get('Client', []), list) else []
+            client_filter = st.multiselect("Client", client_options, 
+                                         default=default_clients)
         elif st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Client' in st.session_state.pnl_data.columns:
-            client_options = ["All"] + sorted(st.session_state.pnl_data['Client'].unique().tolist())
-            client_filter = st.selectbox("Client", client_options,
-                                         index=client_options.index(st.session_state.common_filters.get('Client', 'All')) if st.session_state.common_filters.get('Client', 'All') in client_options else 0)
+            client_options = sorted(st.session_state.pnl_data['Client'].unique().tolist())
+            default_clients = st.session_state.common_filters.get('Client', []) if isinstance(st.session_state.common_filters.get('Client', []), list) else []
+            client_filter = st.multiselect("Client", client_options,
+                                         default=default_clients)
         else:
             client_filter = st.text_input("Client (enter name)", value=st.session_state.common_filters.get('Client', ''))
         
@@ -1520,41 +845,47 @@ def render_analytics_dashboard():
         date_col1, date_col2 = st.columns(2)
         
         with date_col1:
+            # Set default start date to January 1st, 2025
+            default_start_date = datetime(2025, 1, 1).date()
             start_date = st.date_input("Start Date", 
-                                       value=st.session_state.common_filters.get('date_range', (datetime.now() - timedelta(days=365), datetime.now()))[0])
+                                       value=st.session_state.common_filters.get('date_range', (default_start_date, datetime.now()))[0])
         with date_col2:
             end_date = st.date_input("End Date", 
-                                     value=st.session_state.common_filters.get('date_range', (datetime.now() - timedelta(days=365), datetime.now()))[1])
+                                     value=st.session_state.common_filters.get('date_range', (default_start_date, datetime.now()))[1])
         
         # Year filter
         year_options = ["All"]
         current_year = datetime.now().year
-        year_options.extend(range(current_year - 5, current_year + 1))
+        year_options.extend(range(current_year - 5, current_year + 2))  # Include next year
         selected_year = st.selectbox("Year", year_options, 
                                      index=year_options.index(st.session_state.common_filters.get('Year', 'All')) if st.session_state.common_filters.get('Year', 'All') in year_options else 0)
         
-        # Site filter
+        # Site filter - changed to multiselect
         site_filter = None
         site_options = []
         
         if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty and 'Site' in st.session_state.utilization_data.columns:
-            site_options = ["All"] + sorted(st.session_state.utilization_data['Site'].unique().tolist())
+            # Convert all values to strings before sorting
+            site_values = [str(x) for x in st.session_state.utilization_data['Site'].unique()]
+            site_options = sorted(site_values)
+            default_sites = st.session_state.common_filters.get('Site', []) if isinstance(st.session_state.common_filters.get('Site', []), list) else []
+            site_filter = st.multiselect("Site", site_options, default=default_sites)
         elif st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Site_Location' in st.session_state.pnl_data.columns:
-            site_options = ["All"] + sorted(st.session_state.pnl_data['Site_Location'].unique().tolist())
-        
-        if site_options:
-            site_filter = st.selectbox("Site", site_options,
-                                       index=site_options.index(st.session_state.common_filters.get('Site', 'All')) if st.session_state.common_filters.get('Site', 'All') in site_options else 0)
+            # Convert all values to strings before sorting
+            site_values = [str(x) for x in st.session_state.pnl_data['Site_Location'].unique()]
+            site_options = sorted(site_values)
+            default_sites = st.session_state.common_filters.get('Site', []) if isinstance(st.session_state.common_filters.get('Site', []), list) else []
+            site_filter = st.multiselect("Site", site_options, default=default_sites)
         else:
             site_filter = st.text_input("Site (enter name)", value=st.session_state.common_filters.get('Site', ''))
         
         # Save filters to session state when apply button is clicked
         if st.button("Apply Filters"):
             st.session_state.common_filters = {
-                'Client': client_filter if client_filter != "All" else None,
+                'Client': client_filter if client_filter else None,
                 'date_range': (start_date, end_date),
                 'Year': selected_year if selected_year != "All" else None,
-                'Site': site_filter if site_filter != "All" else None
+                'Site': site_filter if site_filter else None
             }
             
             # Remove None values
@@ -1573,7 +904,7 @@ def render_analytics_dashboard():
         st.header("Utilization Analytics")
         
         # Add tab-specific filters
-        with st.expander("Utilization Filters", expanded=False):
+        with st.expander("Utilization Filters", expanded=True):
             # Date filters for utilization data
             col1, col2 = st.columns(2)
             with col1:
@@ -1614,7 +945,8 @@ def render_analytics_dashboard():
                 st.info(f"Showing data with applied filters: {', '.join([f'{k}: {v}' for k, v in st.session_state.common_filters.items()])}")
                 st.write(f"Filtered data: {len(filtered_df)} records (from {len(st.session_state.utilization_data)} total)")
             
-            create_utilization_dashboard(filtered_df)
+            # Pass interactive=True parameter to always show expanded visualization options
+            create_utilization_dashboard(filtered_df, interactive=True)
         else:
             st.info("No utilization data loaded. Please use the 'Load Utilization Data' button above.")
     
@@ -1623,7 +955,7 @@ def render_analytics_dashboard():
         st.header("Financial Performance")
         
         # Add tab-specific filters
-        with st.expander("Financial Filters", expanded=False):
+        with st.expander("Financial Filters", expanded=True):
             # Filters for PnL data
             col1, col2 = st.columns(2)
             with col1:
@@ -1676,7 +1008,7 @@ def render_analytics_dashboard():
         st.header("SOW Analytics")
         
         # Add tab-specific filters
-        with st.expander("SOW Filters", expanded=False):
+        with st.expander("SOW Filters", expanded=True):
             # Filters for SOW data
             col1, col2 = st.columns(2)
             with col1:
