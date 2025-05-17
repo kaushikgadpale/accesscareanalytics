@@ -7,6 +7,12 @@ from plotly.subplots import make_subplots
 import datetime
 import calendar
 
+def format_metric(value, is_percentage=True):
+    """Format metric values without decimals"""
+    if is_percentage:
+        return f"{int(round(value * 100))}%"
+    return f"{int(round(value))}"
+
 def create_utilization_dashboard(df, interactive=True, dark_mode=False):
     """
     Create interactive visualizations for utilization data with enhanced analytics
@@ -111,72 +117,37 @@ def create_utilization_dashboard(df, interactive=True, dark_mode=False):
     metrics_container = st.container()
     
     with metrics_container:
-        col1, col2, col3, col4 = st.columns(4)
+        kpi_cols = st.columns(4)
         
-        with col1:
-            total_clients = df['Client'].nunique()
-            
-            # Get time period info if date column exists
-            date_range_text = ""
-            if 'Date of Service' in df.columns:
-                min_date = df['Date of Service'].min()
-                max_date = df['Date of Service'].max()
-                if pd.notna(min_date) and pd.notna(max_date):
-                    date_range_text = f"<small>({min_date.strftime('%b %Y')} - {max_date.strftime('%b %Y')})</small>"
-            
+        with kpi_cols[0]:
             st.markdown(f"""
-            <div style="background-color: {color_theme['bg']}; padding: 15px; border-radius: 5px;
-                 box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; height: 160px; overflow: hidden;">
-                <h4 style="margin: 0; font-weight: 400; color: {color_theme['text']};">Clients</h4>
-                <h2 style="margin: 10px 0; color: {color_theme['accent']}; font-size: 2.5rem;">{total_clients:,}</h2>
-                <p style="margin: 0; font-size: 0.8rem; color: {color_theme['text']};">
-                    Total unique clients<br> {date_range_text}
-                </p>
+            <div class="card metric-card">
+                <div class="metric-value">{format_metric(df['Show Rate'].mean())}</div>
+                <div class="metric-label">Show Rate</div>
             </div>
             """, unsafe_allow_html=True)
         
-        with col2:
-            total_sites = df['Site'].nunique()
-            avg_sites_per_client = total_sites / total_clients if total_clients > 0 else 0
-            
+        with kpi_cols[1]:
             st.markdown(f"""
-            <div style="background-color: {color_theme['bg']}; padding: 15px; border-radius: 5px;
-                 box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; height: 160px; overflow: hidden;">
-                <h4 style="margin: 0; font-weight: 400; color: {color_theme['text']};">Sites</h4>
-                <h2 style="margin: 10px 0; color: {color_theme['accent']}; font-size: 2.5rem;">{total_sites:,}</h2>
-                <p style="margin: 0; font-size: 0.8rem; color: {color_theme['text']};">
-                    Avg {avg_sites_per_client:.1f} sites per client
-                </p>
+            <div class="card metric-card">
+                <div class="metric-value">{format_metric(df['Booking Rate'].mean())}</div>
+                <div class="metric-label">Booking Rate</div>
             </div>
             """, unsafe_allow_html=True)
         
-        with col3:
-            total_headcount = df['Headcount'].sum() if 'Headcount' in df.columns else 0
-            avg_headcount_per_site = total_headcount / total_sites if total_sites > 0 else 0
-            
+        with kpi_cols[2]:
             st.markdown(f"""
-            <div style="background-color: {color_theme['bg']}; padding: 15px; border-radius: 5px;
-                 box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; height: 160px; overflow: hidden;">
-                <h4 style="margin: 0; font-weight: 400; color: {color_theme['text']};">Headcount</h4>
-                <h2 style="margin: 10px 0; color: {color_theme['accent']}; font-size: 2.5rem;">{total_headcount:,}</h2>
-                <p style="margin: 0; font-size: 0.8rem; color: {color_theme['text']};">
-                    Avg {avg_headcount_per_site:.0f} per site
-                </p>
+            <div class="card metric-card">
+                <div class="metric-value">{format_metric(df['Utilization Rate'].mean())}</div>
+                <div class="metric-label">Utilization</div>
             </div>
             """, unsafe_allow_html=True)
         
-        with col4:
-            total_appointments = df['Total Completed Appts'].sum() if 'Total Completed Appts' in df.columns else 0
-            appt_per_headcount = total_appointments / total_headcount if total_headcount > 0 else 0
-            
+        with kpi_cols[3]:
             st.markdown(f"""
-            <div style="background-color: {color_theme['bg']}; padding: 15px; border-radius: 5px;
-                 box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; height: 160px; overflow: hidden;">
-                <h4 style="margin: 0; font-weight: 400; color: {color_theme['text']};">Appointments</h4>
-                <h2 style="margin: 10px 0; color: {color_theme['accent']}; font-size: 2.5rem;">{total_appointments:,}</h2>
-                <p style="margin: 0; font-size: 0.8rem; color: {color_theme['text']};">
-                    {appt_per_headcount:.2f} per employee
-                </p>
+            <div class="card metric-card">
+                <div class="metric-value">{format_metric(df['Utilization Rate'].mean())}</div>
+                <div class="metric-label">Efficiency</div>
             </div>
             """, unsafe_allow_html=True)
     

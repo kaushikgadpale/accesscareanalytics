@@ -370,60 +370,61 @@ def create_pnl_dashboard(df):
             lambda x: x if isinstance(x, list) else [str(x) if x is not None else "Unknown"]
         )
         
-        # Now safely explode the list column
+        # Process location data
         try:
             location_profit = df.explode('Site_Location_List').groupby('Site_Location_List').agg({
-            'Revenue_Total': 'sum',
-            'Expense_COGS_Total': 'sum',
-            'Net_Profit': 'sum'
-        }).reset_index()
-        
-        location_profit['Profit_Margin'] = location_profit['Net_Profit'] / location_profit['Revenue_Total']
-        
-        fig = px.scatter(
-            location_profit,
-            x='Revenue_Total',
-            y='Net_Profit',
-            size='Expense_COGS_Total',
-            color='Profit_Margin',
+                'Revenue_Total': 'sum',
+                'Expense_COGS_Total': 'sum',
+                'Net_Profit': 'sum'
+            }).reset_index()
+            
+            location_profit['Profit_Margin'] = location_profit['Net_Profit'] / location_profit['Revenue_Total']
+            
+            # Create scatter plot
+            fig = px.scatter(
+                location_profit,
+                x='Revenue_Total',
+                y='Net_Profit',
+                size='Expense_COGS_Total',
+                color='Profit_Margin',
                 hover_name='Site_Location_List',
-            color_continuous_scale='RdYlGn',
-            title='Location Profitability Analysis'
-        )
-        
-        fig.update_layout(
-            xaxis_title="Total Revenue ($)",
-            yaxis_title="Net Profit ($)",
-            coloraxis_colorbar=dict(title="Profit Margin"),
-            margin=dict(t=50, b=50, l=20, r=20),
-            height=500
-        )
-        
-        # Add reference line for breakeven
-        fig.add_shape(
-            type='line',
-            x0=0,
-            y0=0,
-            x1=location_profit['Revenue_Total'].max() * 1.1,
-            y1=0,
-            line=dict(color='red', dash='dash')
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Add insights about location profitability
-        top_location = location_profit.sort_values('Net_Profit', ascending=False).iloc[0]
-        unprofitable_count = len(location_profit[location_profit['Net_Profit'] < 0])
-        
-        st.markdown(f"""
-        <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
-            <strong>📊 Insights:</strong>
-            <ul>
+                color_continuous_scale='RdYlGn',
+                title='Location Profitability Analysis'
+            )
+            
+            fig.update_layout(
+                xaxis_title="Total Revenue ($)",
+                yaxis_title="Net Profit ($)",
+                coloraxis_colorbar=dict(title="Profit Margin"),
+                margin=dict(t=50, b=50, l=20, r=20),
+                height=500
+            )
+            
+            # Add reference line for breakeven
+            fig.add_shape(
+                type='line',
+                x0=0,
+                y0=0,
+                x1=location_profit['Revenue_Total'].max() * 1.1,
+                y1=0,
+                line=dict(color='red', dash='dash')
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Add insights
+            top_location = location_profit.sort_values('Net_Profit', ascending=False).iloc[0]
+            unprofitable_count = len(location_profit[location_profit['Net_Profit'] < 0])
+            
+            st.markdown(f"""
+            <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
+                <strong>📊 Insights:</strong>
+                <ul>
                     <li>Most profitable location: <strong>{top_location['Site_Location_List']}</strong> with ${top_location['Net_Profit']:,.2f} net profit</li>
-                <li>{unprofitable_count} locations are currently operating at a loss (below the red dashed line)</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+                    <li>{unprofitable_count} locations are currently operating at a loss (below the red dashed line)</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
         except Exception as e:
             st.error(f"Error processing location data: {str(e)}")
             st.write("Please check the format of your Site_Location data.")

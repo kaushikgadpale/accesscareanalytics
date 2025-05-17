@@ -26,19 +26,43 @@ h1, h2, h3, h4, h5, h6 {
 /* Metric card styling */
 .metric-card {
     text-align: center;
-    padding: 1rem;
+    padding: 1.5rem;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    background: linear-gradient(145deg, #ffffff, #f5f7fa);
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    transition: all 0.3s ease;
+    border-radius: 12px;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
 }
 
 .metric-value {
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: #404040;
+    font-size: 28px;
+    font-weight: 600;
+    color: #2563eb;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', -apple-system, sans-serif;
 }
 
 .metric-label {
-    font-size: 1rem;
-    color: #666666;
-    opacity: 0.8;
+    font-size: 14px;
+    color: #4b5563;
+    line-height: 1.2;
+    margin: 0;
+    padding: 0;
+    max-width: 120px;
+    font-weight: 500;
 }
 
 /* Custom tabs styling */
@@ -155,9 +179,74 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 6px !important;
 }
 
-/* Sidebar styling */
+/* Updated Sidebar Styling */
 .css-1d391kg, .css-12oz5g7 {
-    background-color: #f8f8f8 !important;
+    background-color: #ffffff !important;
+    border-right: 1px solid #e5e7eb;
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+    padding: 0.5rem;
+    margin: -1rem;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    margin: 0.25rem 0;
+    border-radius: 0.5rem;
+    color: #1f2937;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    font-size: 0.95rem;
+}
+
+.nav-link:hover {
+    background-color: #f3f4f6;
+    color: #111827;
+}
+
+.nav-link.active {
+    background-color: #f3f4f6;
+    color: #111827;
+    font-weight: 600;
+}
+
+.nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-right: 0.75rem;
+    font-size: 1.1rem;
+}
+
+/* Settings Section */
+.settings-section {
+    padding: 1rem;
+    margin-top: 2rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.version-info {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+/* Hide Streamlit's default navigation elements */
+section[data-testid="stSidebar"] > div:first-child {
+    padding-top: 2rem;
+}
+
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div:first-child {
+    margin-top: -1rem;
 }
 
 /* Hide Streamlit branding */
@@ -302,4 +391,37 @@ h1, h2, h3, h4, h5, h6 {
 /* Fix for tooltip hover */
 [data-testid="stTooltip"] {
     display: none !important;
+}
+
+/* Sidebar Navigation Buttons */
+.stSidebar [data-testid="stButton"] > button {
+    width: 100%;
+    background-color: transparent !important;
+    color: #1f2937 !important;
+    border: none !important;
+    text-align: left !important;
+    font-weight: normal !important;
+    padding: 0.5rem !important;
+    margin: 0 !important;
+    border-radius: 0.5rem !important;
+}
+
+.stSidebar [data-testid="stButton"] > button:hover {
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+}
+
+.stSidebar [data-testid="stButton"].active > button {
+    background-color: #f3f4f6 !important;
+    color: #111827 !important;
+    font-weight: 600 !important;
+}
+
+/* Navigation Icon Column */
+.stSidebar [data-testid="column"] {
+    padding: 0 !important;
+}
+
+.stSidebar [data-testid="column"]:first-child {
+    max-width: 40px !important;
 } 

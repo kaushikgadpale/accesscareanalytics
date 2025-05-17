@@ -29,8 +29,8 @@ from airtable_export import render_export_options, export_bookings_to_airtable, 
 
 # Page configuration
 st.set_page_config(
-    page_title="Access Care Analytics Dashboard",
-    page_icon="📊",
+    page_title="Main",
+    page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -150,74 +150,69 @@ def main():
     """Main application entry point"""
     # Add sidebar
     with st.sidebar:
-        # Add logo to sidebar
-        logo_path = "big_logo.png"
-        if os.path.exists(logo_path) and os.path.getsize(logo_path) > 100:
-            try:
-                st.image(logo_path, width=120)
-            except Exception as e:
-                st.markdown(render_logo(width="120px"), unsafe_allow_html=True)
-        else:
-            st.markdown(render_logo(width="120px"), unsafe_allow_html=True)
-        
-        st.markdown("<h3 style='text-align: center; margin-bottom: 0;'>Access Care Analytics</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; font-size: 0.9rem; margin-top: 0;'>Healthcare Analytics Platform</p>", unsafe_allow_html=True)
+        # Remove logo section and just start with navigation
         st.markdown("---")
         
-        # Add navigation links with monochrome icons
-        colored_header("Navigation", description="", color_name="gray-70")
-        
-        # Use the stylable_container to create better-styled buttons
-        with stylable_container(
-            key="sidebar_nav",
-            css_styles="""
-                button {
-                    background-color: transparent;
-                    color: #1f2937;
-                    text-align: left;
-                    font-weight: 500;
-                    padding: 0.5rem 1rem;
-                    width: 100%;
-                    border: 1px solid #e5e7eb;
-                    border-radius: 6px;
-                    margin-bottom: 0.5rem;
-                }
-                button:hover {
-                    background-color: #f3f4f6;
-                    border-color: #d1d5db;
-                }
-                div[data-testid="stHorizontalBlock"] {
-                    align-items: center;
-                }
-            """
-        ):
-            if st.button("Main", use_container_width=True):
-                st.session_state.active_tab = "dashboard"
-                st.rerun()
-                
-            if st.button("Tools", use_container_width=True):
-                st.session_state.active_tab = "tools"
-                st.rerun()
-                
-            if st.button("Integrations", use_container_width=True):
-                st.session_state.active_tab = "integrations"
-                st.rerun()
-                
-            if st.button("Content Creator", use_container_width=True):
-                st.session_state.active_tab = "content"
-                st.rerun()
-        
-        # App information
-        st.markdown("---")
-        colored_header("About", description="", color_name="gray-70")
+        # Navigation section
         st.markdown("""
-        <div style='font-size: 0.9rem;'>
-        Access Care Analytics provides comprehensive tools for healthcare appointment management, data analysis, and reporting.
-        </div>
+        <style>
+        .sidebar-nav {
+            padding: 10px 0;
+        }
+        .nav-link {
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 5px;
+            background-color: transparent;
+            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            color: #1f2937;
+        }
+        .nav-link:hover {
+            background-color: #f3f4f6;
+        }
+        .nav-link.active {
+            background-color: #e5e7eb;
+            font-weight: bold;
+        }
+        .nav-icon {
+            margin-right: 10px;
+            width: 20px;
+            text-align: center;
+        }
+        </style>
         """, unsafe_allow_html=True)
         
+        st.markdown("<div class='sidebar-nav'>", unsafe_allow_html=True)
+        
+        # Navigation items - Update 'app' to 'Main'
+        nav_items = {
+            "dashboard": {"icon": "🏠", "label": "Main"},
+            "tools": {"icon": "🛠️", "label": "Tools"},
+            "integrations": {"icon": "🔗", "label": "Integrations"},
+            "content": {"icon": "📝", "label": "Content Creator"}
+        }
+        
+        for key, item in nav_items.items():
+            active_class = "active" if st.session_state.active_tab == key else ""
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                st.markdown(f"<div class='nav-icon'>{item['icon']}</div>", unsafe_allow_html=True)
+            with col2:
+                if st.button(item["label"], key=f"nav_{key}", use_container_width=True):
+                    st.session_state.active_tab = key
+                    st.rerun()
+        
+        # Add settings section at the bottom
         st.markdown("---")
-        st.markdown("<p style='text-align: center; font-size: 0.8rem; color: #6b7280;'>© 2023 Access Care Analytics</p>", unsafe_allow_html=True)
+        with st.expander("⚙️ Settings"):
+            st.checkbox("Dark Mode", key="dark_mode")
+            st.selectbox("Theme", ["Default", "Light", "Dark"])
+        
+        # Add version info
+        st.markdown("<div class='version-info'>v1.0.0</div>", unsafe_allow_html=True)
     
     render_app_header()
     
@@ -1222,7 +1217,7 @@ def render_dashboard_tab(active_subtab):
                 st.markdown("""
                 <div class="card metric-card">
                     <div class="metric-value">$1,240</div>
-                    <div class="metric-label">Avg. Revenue Per Appointment</div>
+                    <div class="metric-label">Revenue Per Appointment</div>
                 </div>
                 """, unsafe_allow_html=True)
                 

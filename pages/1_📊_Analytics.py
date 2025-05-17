@@ -8,9 +8,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Import the analytics dashboard
 from airtable_analytics import render_analytics_dashboard
 
-# Set page config
+# Page configuration
 st.set_page_config(
-    page_title="Airtable Analytics Dashboard",
+    page_title="Analytics",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -23,5 +23,5 @@ try:
 except:
     st.warning("Styles file not found. Some visual elements may not display correctly.")
 
-# Render the dashboard
+# Render the analytics dashboard
 render_analytics_dashboard() 
