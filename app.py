@@ -47,8 +47,10 @@ if 'active_subtab' not in st.session_state:
     st.session_state.active_subtab = {}
     
 if 'date_range' not in st.session_state:
-    today = datetime.now().date()
-    st.session_state.date_range = (today - timedelta(days=30), today)
+    # Use pandas Timestamp to ensure consistent datetime handling
+    today = pd.Timestamp.now().date()
+    thirty_days_ago = (pd.Timestamp.now() - pd.Timedelta(days=30)).date()
+    st.session_state.date_range = (thirty_days_ago, today)
     st.session_state.date_preset = "Last 30 Days"
 
 if 'bookings_data' not in st.session_state:
@@ -90,20 +92,26 @@ def render_app_header():
         # Try to display logo with proper error handling
         if os.path.exists(big_logo_path) and os.path.getsize(big_logo_path) > 100:
             try:
-                st.image(big_logo_path, width=150)
+                st.markdown('<div style="display: flex; justify-content: center; align-items: center; height: 100%;">', unsafe_allow_html=True)
+                st.image(big_logo_path, width=120, output_format="PNG", use_column_width="never", clamp=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 logo_displayed = True
             except Exception as e:
                 logo_displayed = False
         
         if not logo_displayed and os.path.exists(logo_path) and os.path.getsize(logo_path) > 100:
             try:
-                st.image(logo_path, width=80)
+                st.markdown('<div style="display: flex; justify-content: center; align-items: center; height: 100%;">', unsafe_allow_html=True)
+                st.image(logo_path, width=80, output_format="PNG", use_column_width="never", clamp=True)
+                st.markdown('</div>', unsafe_allow_html=True)
                 logo_displayed = True
             except Exception as e:
                 logo_displayed = False
         
         if not logo_displayed:
+            st.markdown('<div style="display: flex; justify-content: center; align-items: center; height: 100%;">', unsafe_allow_html=True)
             st.markdown(render_logo(width="80px"), unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         
     with col2:
         st.markdown(f"""
@@ -157,57 +165,80 @@ def main():
         st.markdown("""
         <style>
         .sidebar-nav {
-            padding: 10px 0;
+            padding: 8px 0;
         }
         .nav-link {
-            padding: 10px 15px;
-            margin: 5px 0;
-            border-radius: 5px;
+            padding: 6px 12px;
+            margin: 3px 0;
+            border-radius: var(--border-radius);
             background-color: transparent;
-            transition: background-color 0.3s;
+            transition: var(--transition);
             display: flex;
             align-items: center;
             text-decoration: none;
-            color: #1f2937;
+            color: var(--color-text);
         }
         .nav-link:hover {
-            background-color: #f3f4f6;
+            background-color: rgba(255, 255, 255, 0.1);
         }
         .nav-link.active {
-            background-color: #e5e7eb;
-            font-weight: bold;
+            background-color: rgba(62, 147, 236, 0.2);
+            font-weight: 500;
         }
         .nav-icon {
-            margin-right: 10px;
-            width: 20px;
+            margin-right: 8px;
+            width: 18px;
             text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sidebar-title {
+            font-family: var(--font-primary);
+            font-weight: 500;
+            color: var(--color-accent);
+            margin-bottom: 8px;
+            font-size: 0.875rem;
+            text-align: left;
+            padding-left: 8px;
+        }
+        .version-info {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            font-size: 0.6875rem;
+            color: var(--color-secondary);
+            opacity: 0.7;
         }
         </style>
         """, unsafe_allow_html=True)
         
+        st.markdown("<div class='sidebar-title'>Navigation</div>", unsafe_allow_html=True)
         st.markdown("<div class='sidebar-nav'>", unsafe_allow_html=True)
         
-        # Navigation items - Update 'app' to 'Main'
+        # Navigation items with Bootstrap Icons
         nav_items = {
-            "dashboard": {"icon": "🏠", "label": "Main"},
-            "tools": {"icon": "🛠️", "label": "Tools"},
-            "integrations": {"icon": "🔗", "label": "Integrations"},
-            "content": {"icon": "📝", "label": "Content Creator"}
+            "dashboard": {"icon": "bi-house", "label": "Main"},
+            "tools": {"icon": "bi-tools", "label": "Tools"},
+            "integrations": {"icon": "bi-link", "label": "Integrations"},
+            "content": {"icon": "bi-file-text", "label": "Content Creator"}
         }
         
         for key, item in nav_items.items():
             active_class = "active" if st.session_state.active_tab == key else ""
             col1, col2 = st.columns([1, 4])
             with col1:
-                st.markdown(f"<div class='nav-icon'>{item['icon']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='nav-icon'><i class='{item['icon']}' style='font-size: 0.875rem;'></i></div>", unsafe_allow_html=True)
             with col2:
                 if st.button(item["label"], key=f"nav_{key}", use_container_width=True):
                     st.session_state.active_tab = key
                     st.rerun()
         
-        # Add settings section at the bottom
+        # Add settings section at the bottom with small margin
+        st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
         st.markdown("---")
-        with st.expander("⚙️ Settings"):
+        st.markdown("<div class='sidebar-title'><i class='bi bi-gear'></i> Settings</div>", unsafe_allow_html=True)
+        with st.expander(""):
             st.checkbox("Dark Mode", key="dark_mode")
             st.selectbox("Theme", ["Default", "Light", "Dark"])
         
@@ -853,6 +884,150 @@ def render_dashboard_tab(active_subtab):
                 # Analysis tab
                 st.write("### Appointment Analysis")
                 
+                # Add Patient Analysis Section
+                st.subheader("Patient Analysis")
+                
+                # Analyze unique patients
+                unique_patients, service_distribution = analyze_unique_patients(filtered_df)
+                
+                if not unique_patients.empty:
+                    # Create two columns
+                    patient_cols = st.columns(2)
+                    
+                    with patient_cols[0]:
+                        # Display unique patient count
+                        st.metric("Unique Patients", len(unique_patients))
+                        
+                        # Display unique patients table
+                        st.write("#### Unique Patients by Email")
+                        st.dataframe(
+                            unique_patients[["Email", "Customer", "Phone"]],
+                            use_container_width=True
+                        )
+                    
+                    with patient_cols[1]:
+                        if not service_distribution.empty:
+                            # Create pie chart of service distribution
+                            st.write("#### Services per Patient")
+                            fig = px.pie(
+                                service_distribution,
+                                values="Patient_Count",
+                                names="Number_of_Services",
+                                title="Number of Services per Patient",
+                                hover_data=["Percentage"],
+                                labels={
+                                    "Number_of_Services": "Number of Services",
+                                    "Patient_Count": "Number of Patients",
+                                    "Percentage": "Percentage of Patients"
+                                }
+                            )
+                            
+                            # Customize pie chart
+                            fig.update_traces(
+                                textinfo="value+percent",
+                                textposition="inside",
+                                insidetextorientation="radial"
+                            )
+                            
+                            # Add annotations to explain the chart
+                            fig.add_annotation(
+                                text="Shows how many services each patient has used",
+                                xref="paper", yref="paper",
+                                x=0.5, y=-0.15,
+                                showarrow=False
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Add insights about service usage
+                            single_service = service_distribution[service_distribution['Number_of_Services'] == 1]['Patient_Count'].values[0] if 1 in service_distribution['Number_of_Services'].values else 0
+                            multi_service = sum(service_distribution[service_distribution['Number_of_Services'] > 1]['Patient_Count']) if not service_distribution.empty else 0
+                            
+                            st.markdown(f"""
+                            <div style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                                <strong>Insights:</strong>
+                                <ul>
+                                    <li>{single_service} patients ({single_service/len(unique_patients)*100:.1f}%) used only 1 service</li>
+                                    <li>{multi_service} patients ({multi_service/len(unique_patients)*100:.1f}%) used multiple services</li>
+                                </ul>
+                            </div>
+                            """, unsafe_allow_html=True)
+                
+                # Add more detailed patient analysis if there's enough data
+                if len(unique_patients) > 0:
+                    with st.expander("📊 Detailed Patient Service Analysis"):
+                        st.write("#### Most Popular Services by Patient Count")
+                        
+                        # Count patients per service
+                        if 'Service' in filtered_df.columns:
+                            # Get unique patient-service combinations
+                            patient_services = filtered_df[['Email', 'Service']].drop_duplicates()
+                            
+                            # Count patients per service
+                            service_patient_counts = patient_services.groupby('Service')['Email'].nunique().reset_index()
+                            service_patient_counts.columns = ['Service', 'Patient_Count']
+                            service_patient_counts = service_patient_counts.sort_values('Patient_Count', ascending=False)
+                            
+                            # Create bar chart of top services by patient count
+                            fig = px.bar(
+                                service_patient_counts.head(10),
+                                x='Service',
+                                y='Patient_Count',
+                                title='Top 10 Services by Number of Patients',
+                                text_auto=True,
+                                color='Patient_Count',
+                                color_continuous_scale='Viridis'
+                            )
+                            
+                            fig.update_layout(
+                                xaxis_title='Service',
+                                yaxis_title='Number of Patients',
+                                xaxis={'categoryorder': 'total descending'},
+                                height=400
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                        
+                        # Patient visit frequency analysis
+                        st.write("#### Patient Visit Frequency")
+                        
+                        # Count appointments per patient
+                        visit_frequency = filtered_df.groupby('Email').size().reset_index(name='Visit_Count')
+                        
+                        # Create frequency categories
+                        visit_frequency['Frequency_Category'] = pd.cut(
+                            visit_frequency['Visit_Count'],
+                            bins=[0, 1, 2, 3, 5, 10, float('inf')],
+                            labels=['1 visit', '2 visits', '3 visits', '4-5 visits', '6-10 visits', '10+ visits'],
+                            right=False
+                        )
+                        
+                        # Count patients per frequency category
+                        frequency_counts = visit_frequency['Frequency_Category'].value_counts().reset_index()
+                        frequency_counts.columns = ['Frequency', 'Patient_Count']
+                        frequency_counts = frequency_counts.sort_values('Frequency')
+                        
+                        # Create bar chart of visit frequency
+                        fig = px.bar(
+                            frequency_counts,
+                            x='Frequency',
+                            y='Patient_Count',
+                            title='Patient Visit Frequency Distribution',
+                            text_auto=True,
+                            color='Patient_Count',
+                            color_continuous_scale='Viridis'
+                        )
+                        
+                        fig.update_layout(
+                            xaxis_title='Visit Frequency',
+                            yaxis_title='Number of Patients',
+                            height=400
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("No patient data available for analysis.")
+                
                 # Select date level for aggregation
                 date_level = st.selectbox(
                     "Date Aggregation Level", 
@@ -886,149 +1061,206 @@ def render_dashboard_tab(active_subtab):
                 if 'Created Date' in filtered_df.columns:
                     st.subheader("Booking Creation Analysis")
                     
-                    # Filter by date range
-                    creation_df = filtered_df[
-                        (filtered_df['Created Date'].dt.date >= analysis_start_date) &
-                        (filtered_df['Created Date'].dt.date <= analysis_end_date)
-                    ]
-                    
-                    if not creation_df.empty:
-                        # Convert timestamps to naive datetime to avoid timezone warnings
-                        if 'Created Date' in creation_df.columns and pd.api.types.is_datetime64_dtype(creation_df['Created Date']):
-                            # Make a copy to avoid warnings
-                            creation_df = creation_df.copy()
-                            # Remove timezone info properly
-                            if hasattr(creation_df['Created Date'].dtype, 'tz') and creation_df['Created Date'].dtype.tz is not None:
-                                creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
+                    # Filter by date range using timestamps for comparison
+                    try:
+                        # Make copy of filtered_df
+                        creation_df = filtered_df.copy()
                         
-                        # Group by selected frequency - using a different approach to avoid period warnings
-                        # Instead of using to_period, use date components directly
-                        if freq_map[date_level] == 'D':
-                            # Daily - just use the date component
-                            creation_df['Period'] = creation_df['Created Date'].dt.date
-                        elif freq_map[date_level] == 'W':
-                            # Weekly - use start of week
-                            creation_df['Period'] = creation_df['Created Date'].dt.to_period('W').dt.start_time.dt.date
-                        elif freq_map[date_level] == 'M':
-                            # Monthly - use year-month
-                            creation_df['Period'] = creation_df['Created Date'].dt.strftime('%Y-%m')
-                        elif freq_map[date_level] == 'Q':
-                            # Quarterly - use year-quarter
-                            creation_df['Period'] = creation_df['Created Date'].dt.to_period('Q').astype(str)
-                        elif freq_map[date_level] == 'Y':
-                            # Yearly - use year
-                            creation_df['Period'] = creation_df['Created Date'].dt.year.astype(str)
+                        # Convert the Created Date column to datetime if not already
+                        if not pd.api.types.is_datetime64_dtype(creation_df['Created Date']):
+                            creation_df['Created Date'] = pd.to_datetime(creation_df['Created Date'])
+                        
+                        # Convert analysis_start_date and analysis_end_date to Timestamps
+                        start_ts = pd.Timestamp(analysis_start_date)
+                        end_ts = pd.Timestamp(analysis_end_date).replace(hour=23, minute=59, second=59) # Ensure end_ts includes the whole day
+
+                        # Ensure 'Created Date' is timezone-naive for comparison if start_ts/end_ts are naive
+                        if creation_df['Created Date'].dt.tz is not None and start_ts.tz is None:
+                            creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
+                        elif creation_df['Created Date'].dt.tz is None and start_ts.tz is not None:
+                            # This case is less likely if analysis_start_date is from st.date_input, but handle defensively
+                            start_ts = start_ts.tz_localize(None)
+                            end_ts = end_ts.tz_localize(None)
+                        elif creation_df['Created Date'].dt.tz is not None and start_ts.tz is not None and creation_df['Created Date'].dt.tz != start_ts.tz:
+                            # If both have timezones but they are different, convert 'Created Date' to UTC (a common standard) 
+                            # and make sure start_ts/end_ts are also UTC or naive.
+                            # For simplicity here, we'll make 'Created Date' naive. A more robust solution might involve converting all to UTC.
+                            creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
+                            start_ts = start_ts.tz_localize(None) # Assuming start_ts/end_ts should also be naive if we do this
+                            end_ts = end_ts.tz_localize(None)
+
+                        creation_df = creation_df[
+                            (creation_df['Created Date'] >= start_ts) &
+                            (creation_df['Created Date'] <= end_ts)
+                        ]
+                        
+                        if not creation_df.empty:
+                            # Rest of the code remains the same
+                            # Convert timestamps to naive datetime to avoid timezone warnings
+                            if 'Created Date' in creation_df.columns and pd.api.types.is_datetime64_dtype(creation_df['Created Date']):
+                                # Make a copy to avoid warnings
+                                creation_df = creation_df.copy()
+                                # Remove timezone info properly
+                                if hasattr(creation_df['Created Date'].dtype, 'tz') and creation_df['Created Date'].dtype.tz is not None:
+                                    creation_df['Created Date'] = creation_df['Created Date'].dt.tz_localize(None)
+                            
+                            # Group by selected frequency - using a different approach to avoid period warnings
+                            # Instead of using to_period, use date components directly
+                            if freq_map[date_level] == 'D':
+                                # Daily - just use the date component
+                                creation_df['Period'] = creation_df['Created Date'].dt.date
+                            elif freq_map[date_level] == 'W':
+                                # Weekly - use start of week
+                                creation_df['Period'] = creation_df['Created Date'].dt.to_period('W').dt.start_time.dt.date
+                            elif freq_map[date_level] == 'M':
+                                # Monthly - use year-month
+                                creation_df['Period'] = creation_df['Created Date'].dt.strftime('%Y-%m')
+                            elif freq_map[date_level] == 'Q':
+                                # Quarterly - use year-quarter
+                                creation_df['Period'] = creation_df['Created Date'].dt.to_period('Q').astype(str)
+                            elif freq_map[date_level] == 'Y':
+                                # Yearly - use year
+                                creation_df['Period'] = creation_df['Created Date'].dt.year.astype(str)
+                            else:
+                                # Default to daily
+                                creation_df['Period'] = creation_df['Created Date'].dt.date
+                            
+                            # Group by Period
+                            creation_counts = creation_df.groupby('Period').size().reset_index(name='Count')
+                            
+                            # Create creation time graph
+                            fig_creation = px.line(
+                                creation_counts, 
+                                x='Period', 
+                                y='Count',
+                                title=f'Appointments by Creation Date ({date_level})',
+                                markers=True
+                            )
+                            
+                            fig_creation.update_layout(
+                                xaxis_title=f"{date_level} Period",
+                                yaxis_title="Number of Appointments",
+                                hovermode="x unified",
+                                height=400
+                            )
+                            
+                            st.plotly_chart(fig_creation, use_container_width=True)
                         else:
-                            # Default to daily
-                            creation_df['Period'] = creation_df['Created Date'].dt.date
-                        
-                        # Group by Period
-                        creation_counts = creation_df.groupby('Period').size().reset_index(name='Count')
-                        
-                        # Create creation time graph
-                        fig_creation = px.line(
-                            creation_counts, 
-                            x='Period', 
-                            y='Count',
-                            title=f'Appointments by Creation Date ({date_level})',
-                            markers=True
-                        )
-                        
-                        fig_creation.update_layout(
-                            xaxis_title=f"{date_level} Period",
-                            yaxis_title="Number of Appointments",
-                            hovermode="x unified",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig_creation, use_container_width=True)
-                    else:
-                        st.info("No data available for the selected date range.")
+                            st.info("No data available for the selected date range.")
+                    except Exception as e:
+                        st.error(f"Error processing booking creation analysis: {str(e)}")
                 
                 # Analysis based on booking date
                 if 'Start Date' in filtered_df.columns:
                     st.subheader("Booking Date Analysis")
                     
-                    # Filter by date range
-                    booking_df = filtered_df[
-                        (filtered_df['Start Date'].dt.date >= analysis_start_date) &
-                        (filtered_df['Start Date'].dt.date <= analysis_end_date)
-                    ]
-                    
-                    if not booking_df.empty:
-                        # Convert timestamps to naive datetime to avoid timezone warnings
-                        if 'Start Date' in booking_df.columns and pd.api.types.is_datetime64_dtype(booking_df['Start Date']):
-                            # Make a copy to avoid warnings
-                            booking_df = booking_df.copy()
-                            # Remove timezone info properly
-                            if hasattr(booking_df['Start Date'].dtype, 'tz') and booking_df['Start Date'].dtype.tz is not None:
-                                booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
+                    # Filter by date range using timestamps for comparison
+                    try:
+                        # Make copy of filtered_df
+                        booking_df = filtered_df.copy()
                         
-                        # Define the Period column based on the selected frequency
-                        if freq_map[date_level] == 'D':
-                            # Daily - just use the date component
-                            booking_df['Period'] = booking_df['Start Date'].dt.date
-                        elif freq_map[date_level] == 'W':
-                            # Weekly - use start of week
-                            booking_df['Period'] = booking_df['Start Date'].dt.to_period('W').dt.start_time.dt.date
-                        elif freq_map[date_level] == 'M':
-                            # Monthly - use year-month
-                            booking_df['Period'] = booking_df['Start Date'].dt.strftime('%Y-%m')
-                        elif freq_map[date_level] == 'Q':
-                            # Quarterly - use year-quarter
-                            booking_df['Period'] = booking_df['Start Date'].dt.to_period('Q').astype(str)
-                        elif freq_map[date_level] == 'Y':
-                            # Yearly - use year
-                            booking_df['Period'] = booking_df['Start Date'].dt.year.astype(str)
-                        else:
-                            # Default to daily
-                            booking_df['Period'] = booking_df['Start Date'].dt.date
+                        # Convert the Start Date column to datetime if not already
+                        if not pd.api.types.is_datetime64_dtype(booking_df['Start Date']):
+                            booking_df['Start Date'] = pd.to_datetime(booking_df['Start Date'])
+
+                        # Convert analysis_start_date and analysis_end_date to Timestamps
+                        start_ts = pd.Timestamp(analysis_start_date)
+                        end_ts = pd.Timestamp(analysis_end_date).replace(hour=23, minute=59, second=59)
+
+                        # Ensure 'Start Date' is timezone-naive for comparison similar to 'Created Date' logic above
+                        if booking_df['Start Date'].dt.tz is not None and start_ts.tz is None:
+                            booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
+                        elif booking_df['Start Date'].dt.tz is None and start_ts.tz is not None:
+                            start_ts = start_ts.tz_localize(None)
+                            end_ts = end_ts.tz_localize(None)
+                        elif booking_df['Start Date'].dt.tz is not None and start_ts.tz is not None and booking_df['Start Date'].dt.tz != start_ts.tz:
+                            booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
+                            start_ts = start_ts.tz_localize(None)
+                            end_ts = end_ts.tz_localize(None)
+
+                        booking_df = booking_df[
+                            (booking_df['Start Date'] >= start_ts) &
+                            (booking_df['Start Date'] <= end_ts)
+                        ]
                         
-                        if 'Business' in booking_df.columns:
-                            # Group by business and period
-                            business_counts = booking_df.groupby(['Business', 'Period']).size().reset_index(name='Count')
+                        if not booking_df.empty:
+                            # Rest of the code remains the same
+                            # Convert timestamps to naive datetime to avoid timezone warnings
+                            if 'Start Date' in booking_df.columns and pd.api.types.is_datetime64_dtype(booking_df['Start Date']):
+                                # Make a copy to avoid warnings
+                                booking_df = booking_df.copy()
+                                # Remove timezone info properly
+                                if hasattr(booking_df['Start Date'].dtype, 'tz') and booking_df['Start Date'].dtype.tz is not None:
+                                    booking_df['Start Date'] = booking_df['Start Date'].dt.tz_localize(None)
                             
-                            # Create booking date by business graph
-                            fig_business = px.line(
-                                business_counts, 
+                            # Group by selected frequency - using a different approach to avoid period warnings
+                            # Instead of using to_period, use date components directly
+                            if freq_map[date_level] == 'D':
+                                # Daily - just use the date component
+                                booking_df['Period'] = booking_df['Start Date'].dt.date
+                            elif freq_map[date_level] == 'W':
+                                # Weekly - use start of week
+                                booking_df['Period'] = booking_df['Start Date'].dt.to_period('W').dt.start_time.dt.date
+                            elif freq_map[date_level] == 'M':
+                                # Monthly - use year-month
+                                booking_df['Period'] = booking_df['Start Date'].dt.strftime('%Y-%m')
+                            elif freq_map[date_level] == 'Q':
+                                # Quarterly - use year-quarter
+                                booking_df['Period'] = booking_df['Start Date'].dt.to_period('Q').astype(str)
+                            elif freq_map[date_level] == 'Y':
+                                # Yearly - use year
+                                booking_df['Period'] = booking_df['Start Date'].dt.year.astype(str)
+                            else:
+                                # Default to daily
+                                booking_df['Period'] = booking_df['Start Date'].dt.date
+                            
+                            if 'Business' in booking_df.columns:
+                                # Group by business and period
+                                business_counts = booking_df.groupby(['Business', 'Period']).size().reset_index(name='Count')
+                                
+                                # Create booking date by business graph
+                                fig_business = px.line(
+                                    business_counts, 
+                                    x='Period', 
+                                    y='Count',
+                                    color='Business',
+                                    title=f'Appointments by Booking Date and Business ({date_level})',
+                                    markers=True
+                                )
+                                
+                                fig_business.update_layout(
+                                    xaxis_title=f"{date_level} Period",
+                                    yaxis_title="Number of Appointments",
+                                    hovermode="x unified",
+                                    height=500
+                                )
+                                
+                                st.plotly_chart(fig_business, use_container_width=True)
+                            
+                            # Overall booking date trends
+                            booking_counts = booking_df.groupby('Period').size().reset_index(name='Count')
+                            
+                            fig_booking = px.bar(
+                                booking_counts, 
                                 x='Period', 
                                 y='Count',
-                                color='Business',
-                                title=f'Appointments by Booking Date and Business ({date_level})',
-                                markers=True
+                                title=f'Appointments by Booking Date ({date_level})',
+                                color='Count',
+                                color_continuous_scale='Viridis'
                             )
                             
-                            fig_business.update_layout(
+                            fig_booking.update_layout(
                                 xaxis_title=f"{date_level} Period",
                                 yaxis_title="Number of Appointments",
                                 hovermode="x unified",
-                                height=500
+                                height=400
                             )
                             
-                            st.plotly_chart(fig_business, use_container_width=True)
-                        
-                        # Overall booking date trends
-                        booking_counts = booking_df.groupby('Period').size().reset_index(name='Count')
-                        
-                        fig_booking = px.bar(
-                            booking_counts, 
-                            x='Period', 
-                            y='Count',
-                            title=f'Appointments by Booking Date ({date_level})',
-                            color='Count',
-                            color_continuous_scale='Viridis'
-                        )
-                        
-                        fig_booking.update_layout(
-                            xaxis_title=f"{date_level} Period",
-                            yaxis_title="Number of Appointments",
-                            hovermode="x unified",
-                            height=400
-                        )
-                        
-                        st.plotly_chart(fig_booking, use_container_width=True)
-                    else:
-                        st.info("No data available for the selected date range.")
+                            st.plotly_chart(fig_booking, use_container_width=True)
+                        else:
+                            st.info("No data available for the selected date range.")
+                    except Exception as e:
+                        st.error(f"Error processing booking date analysis: {str(e)}")
                 
                 # Year-over-year comparison
                 st.subheader("Year-over-Year Comparison")
@@ -1744,15 +1976,27 @@ def render_integrations_tab(active_subtab):
                 
                 # Display multiselect for businesses
                 business_options = [(b["id"], b["name"]) for b in all_businesses]
+                
+                # Create a function to display business names instead of IDs
+                def format_business_option(business_id):
+                    for id, name in business_options:
+                        if id == business_id:
+                            return name
+                    return business_id
+                
+                # Use the multiselect widget with the format function
                 selected_ids = st.multiselect(
                     "Select Booking Pages",
                     options=[id for id, _ in business_options],
-                    format_func=lambda x: next((name for id, name in business_options if id == x), x),
-                    default=st.session_state.selected_businesses
+                    format_func=format_business_option,
+                    default=st.session_state.selected_businesses,
+                    key="business_multiselect"
                 )
                 
                 # Update session state with selected businesses
-                st.session_state.selected_businesses = selected_ids
+                if selected_ids != st.session_state.selected_businesses:
+                    st.session_state.selected_businesses = selected_ids
+                    st.rerun()  # Force a rerun to update the display
             else:
                 st.warning("No booking pages found. Please check your Microsoft Bookings integration.")
             
@@ -1761,21 +2005,24 @@ def render_integrations_tab(active_subtab):
             
             # Fetch button
             if st.button("Fetch Bookings Data"):
-                with st.spinner("Fetching bookings data..."):
-                    # Run the asynchronous function
-                    bookings_data = asyncio.run(fetch_bookings_data(
-                        start_date,
-                        end_date,
-                        max_results,
-                        st.session_state.selected_businesses
-                    ))
-                    
-                    if bookings_data and len(bookings_data) > 0:
-                        # Store in session state
-                        st.session_state.bookings_data = pd.DataFrame(bookings_data)
-                        st.success(f"Successfully fetched {len(bookings_data)} appointments.")
-                    else:
-                        st.warning("No appointments found for the selected date range.")
+                if not st.session_state.selected_businesses:
+                    st.warning("Please select at least one booking page before fetching data.")
+                else:
+                    with st.spinner("Fetching bookings data..."):
+                        # Run the asynchronous function with the selected business IDs
+                        bookings_data = asyncio.run(fetch_bookings_data(
+                            start_date,
+                            end_date,
+                            max_results,
+                            st.session_state.selected_businesses
+                        ))
+                        
+                        if bookings_data and len(bookings_data) > 0:
+                            # Store in session state
+                            st.session_state.bookings_data = pd.DataFrame(bookings_data)
+                            st.success(f"Successfully fetched {len(bookings_data)} appointments.")
+                        else:
+                            st.warning("No appointments found for the selected date range.")
             
             # Display bookings data if available
             if st.session_state.get('bookings_data') is not None:
@@ -1913,6 +2160,51 @@ def render_content_tab(active_subtab):
             f"The {active_subtab} content creator tab is under development.",
             "document"
         )
+
+def analyze_unique_patients(df):
+    """
+    Analyze unique patients grouped by email and return unique patient counts and service distribution
+    
+    Args:
+        df: DataFrame containing appointment data
+        
+    Returns:
+        unique_patients_df: DataFrame with unique patients
+        service_distribution: DataFrame with service count distribution
+    """
+    if df.empty or 'Email' not in df.columns:
+        return pd.DataFrame(), pd.DataFrame()
+    
+    # Get unique patients with their most recent appointment
+    unique_patients = (df[["Email", "Customer", "Phone", "Start Date"]]
+                      .sort_values("Start Date", ascending=False)
+                      .groupby("Email")
+                      .first()
+                      .reset_index())
+    
+    # Count total unique patients
+    total_unique_patients = len(unique_patients)
+    
+    # Analyze service distribution per patient
+    # Count how many unique services each patient has used
+    if 'Service' in df.columns:
+        # Group by email and count unique services
+        services_per_patient = df.groupby('Email')['Service'].nunique().reset_index()
+        services_per_patient.columns = ['Email', 'Service_Count']
+        
+        # Create distribution of service counts
+        service_distribution = services_per_patient['Service_Count'].value_counts().reset_index()
+        service_distribution.columns = ['Number_of_Services', 'Patient_Count']
+        
+        # Sort by number of services
+        service_distribution = service_distribution.sort_values('Number_of_Services')
+        
+        # Calculate percentage
+        service_distribution['Percentage'] = service_distribution['Patient_Count'] / total_unique_patients * 100
+        
+        return unique_patients, service_distribution
+    
+    return unique_patients, pd.DataFrame()
 
 # Call the main function
 if __name__ == "__main__":

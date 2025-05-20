@@ -59,10 +59,6 @@ async def fetch_bookings_data(start_date, end_date, max_results=500, selected_bu
     try:
         st.info("Fetching bookings data...")
         
-        # Debug information about parameters
-        st.write(f"Debug: start_date = {start_date}, end_date = {end_date}, max_results = {max_results}")
-        st.write(f"Debug: selected_businesses type = {type(selected_businesses)}")
-        
         # Use provided selected businesses if available
         businesses = selected_businesses
         
@@ -73,12 +69,6 @@ async def fetch_bookings_data(start_date, end_date, max_results=500, selected_bu
             if not businesses:
                 st.warning("No businesses found in your Microsoft Bookings account")
                 return []
-        else:
-            # Debug selected businesses
-            if isinstance(businesses, list):
-                st.write(f"Debug: Number of selected businesses = {len(businesses)}")
-                if len(businesses) > 0:
-                    st.write(f"Debug: First selected business = {businesses[0]}, type = {type(businesses[0])}")
         
         # Ensure businesses is a list
         if not isinstance(businesses, list):
@@ -86,49 +76,35 @@ async def fetch_bookings_data(start_date, end_date, max_results=500, selected_bu
             
         # If businesses are just IDs (strings), convert them to proper format for fetch_appointments
         processed_businesses = []
-        try:
-            if businesses and isinstance(businesses[0], str):
-                # These are likely just IDs, fetch the full business information
-                st.info("Converting business IDs to full business objects")
-                all_business_details = await fetch_businesses()
-                
-                if not all_business_details:
-                    st.warning("Failed to fetch business details")
-                    return []
-                    
-                # Match IDs with business details
-                for business_id in businesses:
-                    business_info = next((b for b in all_business_details if b["id"] == business_id), None)
-                    if business_info:
-                        processed_businesses.append(business_info)
-                        st.write(f"Found business: {business_info['name']}")
-                    else:
-                        st.warning(f"Could not find details for business ID: {business_id}")
-                
-                if processed_businesses:
-                    businesses = processed_businesses
-                else:
-                    st.warning("Could not find details for any of the selected businesses")
-                    return []
-        except Exception as e:
-            st.error(f"Error processing business IDs: {str(e)}")
-            import traceback
-            st.error(f"Traceback: {traceback.format_exc()}")
-            # Continue with original businesses list
+        if businesses and isinstance(businesses[0], str):
+            # These are likely just IDs, fetch the full business information
+            st.info("Converting business IDs to full business objects")
+            all_business_details = await fetch_businesses()
             
+            if not all_business_details:
+                st.warning("Failed to fetch business details")
+                return []
+                
+            # Match IDs with business details
+            for business_id in businesses:
+                business_info = next((b for b in all_business_details if b["id"] == business_id), None)
+                if business_info:
+                    processed_businesses.append(business_info)
+                else:
+                    st.warning(f"Could not find details for business ID: {business_id}")
+            
+            if processed_businesses:
+                businesses = processed_businesses
+            else:
+                st.warning("Could not find details for any of the selected businesses")
+                return []
+        
         st.info(f"Found {len(businesses)} booking pages. Fetching appointments for each page...")
         
         # Display the business pages we're fetching from
-        try:
-            business_names = [b["name"] for b in businesses if isinstance(b, dict) and "name" in b]
-            if business_names:
-                st.write("Fetching from booking pages:", ", ".join(business_names))
-            else:
-                st.write("Fetching from booking pages (names not available)")
-                st.write("Businesses:", businesses)
-        except Exception as e:
-            st.warning(f"Could not extract business names: {str(e)}")
-            st.write("Businesses:", businesses)
+        business_names = [b["name"] for b in businesses if isinstance(b, dict) and "name" in b]
+        if business_names:
+            st.write("Fetching from booking pages:", ", ".join(business_names))
         
         # Fetch appointments for each business
         appointments = await fetch_appointments(businesses, start_date, end_date, max_results)

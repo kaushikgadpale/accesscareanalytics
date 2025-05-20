@@ -135,7 +135,6 @@ def create_pnl_dashboard(df):
             'Service_Days': 'sum'
         }).reset_index()
         
-        client_profit['Profit_Margin'] = client_profit['Net_Profit'] / client_profit['Revenue_Total']
         client_profit['Profit_Per_Day'] = client_profit['Net_Profit'] / client_profit['Service_Days']
         
         fig = px.bar(
@@ -143,7 +142,7 @@ def create_pnl_dashboard(df):
             x='Client',
             y='Net_Profit',
             title='Top 10 Clients by Net Profit',
-            color='Profit_Margin',
+            color='Profit_Per_Day',
             color_continuous_scale='RdYlGn',
             text_auto='$.2s'
         )
@@ -152,7 +151,7 @@ def create_pnl_dashboard(df):
         fig.update_layout(
             xaxis_title="Client",
             yaxis_title="Net Profit ($)",
-            coloraxis_colorbar=dict(title="Profit Margin"),
+            coloraxis_colorbar=dict(title="Profit Per Day"),
             margin=dict(t=50, b=100, l=20, r=20),
             height=450
         )
@@ -169,12 +168,12 @@ def create_pnl_dashboard(df):
         """, unsafe_allow_html=True)
         
         st.markdown(f"""
-        - Most profitable client: **{top_client['Client']}** with ${top_client['Net_Profit']:,.2f} net profit ({top_client['Profit_Margin']:.1%} margin)
+        - Most profitable client: **{top_client['Client']}** with ${top_client['Net_Profit']:,.2f} net profit per day
         """)
         
         if bottom_client is not None:
             st.markdown(f"""
-            - Attention needed: **{bottom_client['Client']}** is showing a loss of ${abs(bottom_client['Net_Profit']):,.2f}
+            - Attention needed: **{bottom_client['Client']}** is showing a loss of ${abs(bottom_client['Net_Profit']):,.2f} per day
             """)
         
         st.markdown("</div>", unsafe_allow_html=True)
@@ -224,7 +223,6 @@ def create_pnl_dashboard(df):
                 'Net_Profit': 'sum'
             }).reset_index()
             
-            client_metrics['Profit_Margin'] = client_metrics['Net_Profit'] / client_metrics['Revenue_Total']
             client_metrics['Revenue_Share'] = client_metrics['Revenue_Total'] / total_revenue
             
             # Sort by revenue share
@@ -238,7 +236,7 @@ def create_pnl_dashboard(df):
                     <h4 style="color: #1f2937; margin: 0 0 10px 0;">{client['Client']}</h4>
                     <div style="display: flex; justify-content: space-between; color: #6b7280; font-size: 0.9rem;">
                         <span>Revenue: ${client['Revenue_Total']:,.2f} ({client['Revenue_Share']:.1%} of total)</span>
-                        <span>Profit: ${client['Net_Profit']:,.2f} ({client['Profit_Margin']:.1%} margin)</span>
+                        <span>Profit: ${client['Net_Profit']:,.2f} ({client['Profit_Per_Day']:.2f} per day)</span>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -278,8 +276,6 @@ def create_pnl_dashboard(df):
                     'Net_Profit': 'sum'
                 }).reset_index()
                 
-                monthly_trends['Profit_Margin'] = monthly_trends['Net_Profit'] / monthly_trends['Revenue_Total']
-                
                 # Calculate month-over-month changes
                 monthly_trends['Revenue_Change'] = monthly_trends['Revenue_Total'].pct_change()
                 monthly_trends['Profit_Change'] = monthly_trends['Net_Profit'].pct_change()
@@ -304,7 +300,7 @@ def create_pnl_dashboard(df):
                         </div>
                         <div>
                             <h4 style="color: #6b7280; margin: 0 0 10px 0; font-size: 0.9rem;">Profit Margin</h4>
-                            <p style="color: #1f2937; margin: 0; font-size: 1.2rem; font-weight: 600;">{latest_month['Profit_Margin']:.1%}</p>
+                            <p style="color: #1f2937; margin: 0; font-size: 1.2rem; font-weight: 600;">{latest_month['Net_Profit'] / latest_month['Revenue_Total']:.1%}</p>
                         </div>
                     </div>
                 </div>
@@ -324,7 +320,7 @@ def create_pnl_dashboard(df):
                 """, unsafe_allow_html=True)
             
             # Analyze profit margins
-            low_margin_clients = client_metrics[client_metrics['Profit_Margin'] < 0.1]
+            low_margin_clients = client_metrics[client_metrics['Net_Profit'] < 0]
             if not low_margin_clients.empty:
                 st.markdown("""
                 <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #10b981;">
@@ -345,175 +341,6 @@ def create_pnl_dashboard(df):
                     """, unsafe_allow_html=True)
 
             st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Location Performance
-    if 'Site_Location' in df.columns and 'Net_Profit' in df.columns:
-        st.subheader("Location Profitability")
-        
-        # Add explanation for location profitability
-        st.markdown("""
-        <div style="background-color: #f3f0ff; padding: 10px; border-left: 4px solid #7950f2; border-radius: 3px; margin-bottom: 15px;">
-            This scatter plot shows the relationship between revenue and profit across different locations. 
-            The size of each bubble represents expenses, and the color indicates profit margin. 
-            Locations in the upper right quadrant with green coloring are your best performers.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Debug information for Site_Location
-        with st.expander("Debug Site_Location", expanded=False):
-            st.write("Site_Location values types:", [type(x) for x in df['Site_Location'].head(10)])
-            st.write("First few Site_Location values:", df['Site_Location'].head(10).tolist())
-        
-        # Ensure Site_Location is properly formatted for explode
-        # If it's not already a list type, convert single values to lists
-        df['Site_Location_List'] = df['Site_Location'].apply(
-            lambda x: x if isinstance(x, list) else [str(x) if x is not None else "Unknown"]
-        )
-        
-        # Process location data
-        try:
-            location_profit = df.explode('Site_Location_List').groupby('Site_Location_List').agg({
-                'Revenue_Total': 'sum',
-                'Expense_COGS_Total': 'sum',
-                'Net_Profit': 'sum'
-            }).reset_index()
-            
-            location_profit['Profit_Margin'] = location_profit['Net_Profit'] / location_profit['Revenue_Total']
-            
-            # Create scatter plot
-            fig = px.scatter(
-                location_profit,
-                x='Revenue_Total',
-                y='Net_Profit',
-                size='Expense_COGS_Total',
-                color='Profit_Margin',
-                hover_name='Site_Location_List',
-                color_continuous_scale='RdYlGn',
-                title='Location Profitability Analysis'
-            )
-            
-            fig.update_layout(
-                xaxis_title="Total Revenue ($)",
-                yaxis_title="Net Profit ($)",
-                coloraxis_colorbar=dict(title="Profit Margin"),
-                margin=dict(t=50, b=50, l=20, r=20),
-                height=500
-            )
-            
-            # Add reference line for breakeven
-            fig.add_shape(
-                type='line',
-                x0=0,
-                y0=0,
-                x1=location_profit['Revenue_Total'].max() * 1.1,
-                y1=0,
-                line=dict(color='red', dash='dash')
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Add insights
-            top_location = location_profit.sort_values('Net_Profit', ascending=False).iloc[0]
-            unprofitable_count = len(location_profit[location_profit['Net_Profit'] < 0])
-            
-            st.markdown(f"""
-            <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
-                <strong>📊 Insights:</strong>
-                <ul>
-                    <li>Most profitable location: <strong>{top_location['Site_Location_List']}</strong> with ${top_location['Net_Profit']:,.2f} net profit</li>
-                    <li>{unprofitable_count} locations are currently operating at a loss (below the red dashed line)</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
-        except Exception as e:
-            st.error(f"Error processing location data: {str(e)}")
-            st.write("Please check the format of your Site_Location data.")
-    
-    # Time Series
-    if 'Service_Month' in df.columns:
-        st.subheader("Monthly Financial Performance")
-        
-        # Add explanation for monthly performance
-        st.markdown("""
-        <div style="background-color: #fff4e6; padding: 10px; border-left: 4px solid #fd7e14; border-radius: 3px; margin-bottom: 15px;">
-            This chart shows your financial performance over time. Track revenue, expenses, and profit trends to identify 
-            seasonal patterns and business growth. The line represents net profit, while bars show revenue and expenses.
-        </div>
-        """, unsafe_allow_html=True)
-        
-        monthly_performance = df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
-            'Revenue_Total': 'sum',
-            'Expense_COGS_Total': 'sum',
-            'Net_Profit': 'sum'
-        }).reset_index()
-        
-        monthly_performance['Month'] = monthly_performance['Service_Month'].dt.strftime('%b %Y')
-        monthly_performance['Profit_Margin'] = monthly_performance['Net_Profit'] / monthly_performance['Revenue_Total']
-        
-        fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            x=monthly_performance['Month'],
-            y=monthly_performance['Revenue_Total'],
-            name='Revenue',
-            marker_color='rgb(55, 83, 109)'
-        ))
-        
-        fig.add_trace(go.Bar(
-            x=monthly_performance['Month'],
-            y=monthly_performance['Expense_COGS_Total'],
-            name='Expenses',
-            marker_color='rgb(219, 64, 82)'
-        ))
-        
-        fig.add_trace(go.Scatter(
-            x=monthly_performance['Month'],
-            y=monthly_performance['Net_Profit'],
-            name='Net Profit',
-            line=dict(color='rgb(26, 118, 255)', width=4)
-        ))
-        
-        fig.update_layout(
-            title='Monthly Financial Performance',
-            barmode='group',
-            xaxis_title="Month",
-            yaxis_title="Amount ($)",
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            ),
-            margin=dict(t=50, b=100, l=20, r=20),
-            height=500
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Add trend analysis
-        if len(monthly_performance) > 1:
-            first_month = monthly_performance.iloc[0]
-            last_month = monthly_performance.iloc[-1]
-            profit_change = last_month['Net_Profit'] - first_month['Net_Profit']
-            revenue_change = last_month['Revenue_Total'] - first_month['Revenue_Total']
-            
-            profit_trend_color = "#12b886" if profit_change >= 0 else "#fa5252"
-            revenue_trend_color = "#12b886" if revenue_change >= 0 else "#fa5252"
-            
-            st.markdown(f"""
-            <div style="background-color: #fff3bf; padding: 10px; border-radius: 3px; margin-top: 10px;">
-                <strong>📈 Trend Analysis:</strong>
-                <ul>
-                    <li>Net Profit has <span style="color: {profit_trend_color}; font-weight: bold;">
-                        {"increased" if profit_change >= 0 else "decreased"} by ${abs(profit_change):,.2f}
-                    </span> from {first_month['Month']} to {last_month['Month']}.</li>
-                    <li>Revenue has <span style="color: {revenue_trend_color}; font-weight: bold;">
-                        {"increased" if revenue_change >= 0 else "decreased"} by ${abs(revenue_change):,.2f}
-                    </span> over the same period.</li>
-                </ul>
-            </div>
-            """, unsafe_allow_html=True)
 
 def create_sow_dashboard(df):
     """

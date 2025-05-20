@@ -1,252 +1,450 @@
 /* Access Care Analytics Dashboard Custom Styling */
 
+/* Import Font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+@import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css");
+
+/* CSS Variables */
+:root {
+    --font-primary: 'Inter', 'Segoe UI', Roboto, sans-serif;
+    
+    /* Light Theme Palette */
+    --color-bg: #f8f9fa;                     /* Page background - Very light gray */
+    --color-card: #ffffff;                   /* Card background - White */
+    --color-text: #212529;                   /* Primary text - Dark gray */
+    --color-text-secondary: #495057;         /* Secondary text - Medium gray */
+    --color-text-on-accent: #ffffff;         /* Text for on accent-colored backgrounds */
+    
+    --color-accent: #5E8C6A;                 /* Accent - Muted Green */
+    --color-accent-hover: #4a7055;           /* Accent Hover - Darker Muted Green */
+    
+    --color-border: #dee2e6;                 /* Borders - Light gray */
+    
+    --color-success: #28a745;                /* Success - Green */
+    --color-warning: #ffc107;                /* Warning - Yellow */
+    --color-warning-text: #212529;           /* Text for warning backgrounds */
+    --color-danger: #dc3545;                 /* Danger - Red */
+    --color-info-bg: rgba(94, 140, 106, 0.1); /* Background for info boxes (muted green based) */
+
+    --color-button-text: #212529;            /* Default button text */
+    --color-button-bg: #ffffff;               /* Default button background */
+    --color-button-hover-bg: #f8f9fa;        /* Default button hover background */
+    --color-button-border: var(--color-border); /* Default button border */
+
+    --border-radius: 4px;                    /* Slightly more minimalist */
+    --box-shadow: 0 1px 3px rgba(0,0,0,0.05); /* Very subtle shadow */
+    --transition: all 0.2s ease;
+
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+
+    /* Old variables that might be referenced, map them or remove if not needed */
+    --color-primary: var(--color-text); /* Was white, now main text color */
+    --color-secondary: var(--color-text-secondary); /* Was #a3a7bd */
+    --color-text-dark: var(--color-text); /* Was #1a1a1a, for text on light buttons */
+    --color-accent-dark: var(--color-accent-hover); /* Remapped */
+}
+
 /* Global Styles */
 .stApp {
-    background-color: #ffffff;
-    color: #1a1a1a;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-primary);
+    font-size: 0.875rem; /* 14px */
+    letter-spacing: -0.01em;
 }
 
 /* Main header styling */
 h1, h2, h3, h4, h5, h6 {
-    color: #404040 !important;
-    font-family: 'Inter', 'Segoe UI', sans-serif;
-    font-weight: 600;
+    color: var(--color-text) !important;
+    font-family: var(--font-primary);
+    font-weight: 500;
+    letter-spacing: -0.025em;
+    margin-top: var(--spacing-md);
+    margin-bottom: var(--spacing-md);
+}
+
+h1 { font-size: 1.75rem; } /* 28px */
+h2 { font-size: 1.5rem; }  /* 24px */
+h3 { font-size: 1.25rem; } /* 20px */
+h4, h5, h6 { font-size: 1rem; } /* 16px */
+
+/* Bootstrap Icons Styling */
+.bi {
+    vertical-align: middle !important;
+    line-height: 1 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    position: relative !important;
+    top: -0.075em !important; /* Fine-tuned alignment */
+}
+
+.nav-icon .bi { /* Used in sidebar */
+    font-size: 1rem; /* Increased slightly for clarity */
+    color: var(--color-accent);
+}
+
+/* Logo Styling (ensure it fits the theme) */
+.app-logo {
+    max-width: 100% !important;
+    height: auto !important;
+    object-fit: contain !important;
+    padding: var(--spacing-sm);
+}
+
+/* App header styling */
+.app-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-sm) 0;
+}
+
+.app-title {
+    color: var(--color-text) !important;
+    margin: 0;
+    font-size: 1.75rem; /* Match h1 */
+    font-weight: 500;
+}
+
+.app-subtitle {
+    color: var(--color-text-secondary);
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 400;
 }
 
 /* Card styling */
 .card {
-    background-color: #ffffff;
-    border-radius: 8px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    margin-bottom: 1.5rem;
-    border: 1px solid #e5e5e5;
+    background-color: var(--color-card);
+    border-radius: var(--border-radius);
+    padding: var(--spacing-md);
+    box-shadow: var(--box-shadow);
+    margin-bottom: var(--spacing-md);
+    border: 1px solid var(--color-border);
 }
 
 /* Metric card styling */
 .metric-card {
     text-align: center;
-    padding: 1.5rem;
-    min-height: 120px;
+    padding: var(--spacing-md);
+    min-height: 100px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 0.75rem;
-    background: linear-gradient(145deg, #ffffff, #f5f7fa);
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
-    transition: all 0.3s ease;
-    border-radius: 12px;
+    gap: var(--spacing-sm);
+    background: var(--color-card);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--box-shadow);
+    transition: var(--transition);
+    border-radius: var(--border-radius);
 }
 
 .metric-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.07); /* Slightly more pronounced shadow on hover */
 }
 
 .metric-value {
-    font-size: 28px;
+    font-size: 1.75rem; /* Slightly larger */
     font-weight: 600;
-    color: #2563eb;
+    color: var(--color-accent);
     line-height: 1;
     margin: 0;
     padding: 0;
-    font-family: 'Inter', -apple-system, sans-serif;
 }
 
 .metric-label {
-    font-size: 14px;
-    color: #4b5563;
+    font-size: 0.8125rem; /* 13px */
+    color: var(--color-text-secondary);
     line-height: 1.2;
     margin: 0;
     padding: 0;
     max-width: 120px;
-    font-weight: 500;
-}
-
-/* Custom tabs styling */
-.custom-tab {
-    background-color: #f2f2f2;
-    border-radius: 8px 8px 0 0;
-    padding: 0.75rem 1.25rem;
-    font-weight: 500;
-    border-bottom: 3px solid transparent;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.custom-tab:hover {
-    background-color: #e5e5e5;
-}
-
-.custom-tab.active {
-    border-bottom-color: #404040;
-    background-color: #e5e5e5;
+    font-weight: 400;
 }
 
 /* Button styling */
 .stButton>button {
-    background-color: #404040 !important;
-    color: white !important;
-    border: none !important;
-    border-radius: 6px !important;
-    transition: all 0.2s ease !important;
+    background-color: var(--color-button-bg) !important;
+    color: var(--color-button-text) !important;
+    border: 1px solid var(--color-button-border) !important;
+    border-radius: var(--border-radius) !important;
+    transition: var(--transition) !important;
     font-weight: 500 !important;
+    font-family: var(--font-primary) !important;
+    font-size: 0.8125rem !important; /* 13px */
+    padding: 0.375rem 0.875rem !important; /* Adjusted padding */
+    height: auto !important;
+    line-height: 1.5 !important;
+    margin: var(--spacing-xs) 0 !important;
+    box-shadow: none !important; /* Minimalist buttons */
 }
 
 .stButton>button:hover {
-    background-color: #666666 !important;
-    color: white !important;
+    background-color: var(--color-button-hover-bg) !important;
+    color: var(--color-accent) !important; /* Accent color on hover for text */
+    border-color: var(--color-accent) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important;
 }
 
-/* Sidebar button styling */
+.stButton>button:active {
+    transform: translateY(0px) !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05) !important;
+}
+
+
+/* Button icons */
+.stButton>button .bi {
+    font-size: 0.875rem !important; /* Slightly larger icon in button */
+    margin-right: var(--spacing-sm) !important; /* More space for icon */
+    vertical-align: middle !important;
+    position: relative !important;
+    top: -1px !important;
+}
+
+/* Main content area styling */
+.main .block-container {
+    padding: var(--spacing-md) !important;
+    max-width: 1200px !important; /* Keep max width for content readability */
+}
+
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+    background-color: var(--color-card) !important; /* Or a slightly off-white like #fdfdfd */
+    border-right: 1px solid var(--color-border) !important;
+    padding: var(--spacing-sm) !important;
+}
+
+[data-testid="stSidebar"] .block-container {
+    padding-top: 0 !important;
+}
+
+/* Sidebar button styling (for navigation) */
 .stSidebar .stButton>button {
     background-color: transparent !important;
-    color: #404040 !important;
-    border: 1px solid #e5e5e5 !important;
+    color: var(--color-text) !important;
+    border: none !important;
     text-align: left !important;
-    font-weight: 500 !important;
+    font-weight: 400 !important;
+    box-shadow: none !important;
+    padding: var(--spacing-sm) var(--spacing-sm) !important; /* Increased padding */
+    margin: 2px 0 !important;
+    border-radius: var(--border-radius) !important;
 }
 
 .stSidebar .stButton>button:hover {
-    background-color: #f2f2f2 !important;
-    border-color: #d1d1d1 !important;
+    background-color: var(--color-button-hover-bg) !important; /* Use standard hover for consistency */
+    color: var(--color-accent) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* Sidebar Navigation specific classes (if app.py uses them) */
+.sidebar-nav { /* From app.py */
+    padding: var(--spacing-xs);
+    margin: 0;
+}
+
+.nav-link { /* From app.py */
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-sm); /* Increased padding */
+    margin: 2px 0;
+    border-radius: var(--border-radius);
+    color: var(--color-text);
+    text-decoration: none;
+    transition: var(--transition);
+    cursor: pointer;
+    font-size: 0.875rem; /* Match global font size */
+}
+
+.nav-link:hover {
+    background-color: var(--color-button-hover-bg);
+    color: var(--color-accent);
+}
+
+.nav-link.active { /* Class from app.py for active nav link */
+    background-color: var(--color-info-bg); /* Muted green background */
+    color: var(--color-accent);
+    font-weight: 500;
+}
+
+.nav-icon { /* From app.py */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem; /* Increased width */
+    height: 1.5rem; /* Increased height */
+    margin-right: var(--spacing-sm);
+    font-size: 1rem; /* Match .nav-icon .bi */
+}
+
+.sidebar-title { /* From app.py */
+    font-size: 0.9375rem !important; /* 15px, slightly larger */
+    font-weight: 500 !important;
+    margin-bottom: var(--spacing-sm) !important;
+    color: var(--color-accent) !important;
+    padding: var(--spacing-xs) var(--spacing-sm) !important;
+}
+
+/* Fix for icon alignment in all sections */
+[data-testid="stMarkdown"] i.bi {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 1em !important;
+    width: 1em !important;
+    vertical-align: middle !important;
+    position: relative !important; /* Added for consistency */
+    top: -0.075em !important; /* Added for consistency */
 }
 
 /* Tab Button styling */
+/* This targets Streamlit's internal structure for tabs made with st.button */
+div[data-testid="stHorizontalBlock"] > div[data-testid="stVerticalBlock"]:has(button[kind="secondaryFormSubmit"]) {
+    margin-right: 4px; /* Add some spacing between tab buttons */
+}
+
 [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
-    background-color: #f2f2f2 !important;
-    color: #404040 !important;
-    border-radius: 8px 8px 0 0 !important;
-    border-bottom: 3px solid transparent !important;
-    font-weight: 500 !important;
+    background-color: transparent !important; /* Minimalist tabs */
+    color: var(--color-text-secondary) !important; /* Inactive tab text color */
+    border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
+    border: 1px solid transparent !important; /* No border initially */
+    border-bottom: 2px solid transparent !important; /* Underline for active state */
+    font-weight: 400 !important;
     margin: 0 !important;
-    padding-top: 12px !important;
-    padding-bottom: 12px !important;
+    padding: 0.45rem 1rem !important; /* Adjusted padding */
+    transition: var(--transition) !important;
+    font-size: 0.875rem !important; /* Match global font size */
+    box-shadow: none !important;
 }
 
 [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]):hover {
-    background-color: #e5e5e5 !important;
-    border-bottom: 3px solid #404040 !important;
+    background-color: transparent !important;
+    color: var(--color-accent) !important; /* Accent on hover */
+    border-bottom: 2px solid var(--color-accent-hover) !important; /* Underline appears on hover */
 }
 
 /* Active tab styling */
-[data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"].active:has(+ div[aria-label*="Switch to"]) {
-    background-color: #e5e5e5 !important;
-    border-bottom: 3px solid #404040 !important;
+[data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"].active:has(+ div[aria-label*="Switch to"]),
+[data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:focus:has(+ div[aria-label*="Switch to"]) /* Assuming .active class is added or focus state indicates active */ {
+    background-color: transparent !important;
+    color: var(--color-accent) !important; /* Active tab text color */
+    border-bottom: 2px solid var(--color-accent) !important;
+    font-weight: 500 !important;
 }
 
 /* Subtabs container and styling */
-.subtabs-container {
-    margin-top: -20px;
-    margin-bottom: 20px;
-    border-top: 1px solid #e5e5e5;
-    padding-top: 10px;
+.subtabs-container { /* From app.py */
+    margin-top: 0px; /* Align better with main tabs */
+    margin-bottom: var(--spacing-md);
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--spacing-xs);
 }
 
 /* Subtabs styling */
 .subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]) {
-    background-color: #f8f8f8 !important;
-    font-size: 0.85rem !important;
-    padding: 8px 12px !important;
-    border-radius: 6px !important;
-    margin-right: 5px !important;
-    border: 1px solid #e5e5e5 !important;
-    border-bottom: 2px solid transparent !important;
+    background-color: transparent !important;
+    color: var(--color-text-secondary) !important;
+    font-size: 0.8125rem !important; /* Slightly smaller for subtabs */
+    padding: 0.3rem 0.6rem !important;
+    border-radius: var(--border-radius) !important;
+    margin-right: var(--spacing-xs) !important;
+    border: 1px solid transparent !important; /* No border */
+    border-bottom: 2px solid transparent !important; /* Minimalist */
 }
 
 .subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"]:has(+ div[aria-label*="Switch to"]):hover {
-    background-color: #f1f1f1 !important;
-    border-bottom: 2px solid #404040 !important;
+    background-color: transparent !important;
+    color: var(--color-accent) !important;
+    border-bottom: 2px solid var(--color-accent-hover) !important;
 }
+
+.subtabs-container [data-testid="stButton"] button[kind="secondaryFormSubmit"][data-baseweb="button"].active:has(+ div[aria-label*="Switch to"]) {
+     color: var(--color-accent) !important;
+     border-bottom: 2px solid var(--color-accent) !important;
+     font-weight: 500;
+}
+
 
 /* Input field styling */
 .stTextInput>div>div>input, 
 .stNumberInput>div>div>input,
-.stDateInput>div>div>input {
-    background-color: #f8f8f8 !important;
-    color: #1a1a1a !important;
-    border: 1px solid #e5e5e5 !important;
-    border-radius: 6px !important;
+.stDateInput>div>div>input,
+.stTextArea textarea {
+    background-color: var(--color-card) !important;
+    color: var(--color-text) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--border-radius) !important;
+    font-size: 0.875rem !important;
+    padding: 0.4rem 0.8rem !important; /* Adjusted padding */
+    box-shadow: none !important;
 }
+.stTextArea textarea {
+    padding: 0.8rem !important;
+}
+
 
 /* Selectbox styling */
-.stSelectbox>div>div>div {
-    background-color: #f8f8f8 !important;
-    color: #1a1a1a !important;
-    border: 1px solid #e5e5e5 !important;
-    border-radius: 6px !important;
+.stSelectbox>div>div>div, [data-baseweb="select"] {
+    background-color: var(--color-card) !important;
+    color: var(--color-text) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--border-radius) !important;
+    font-size: 0.875rem !important;
+    box-shadow: none !important;
 }
 
-/* Updated Sidebar Styling */
-.css-1d391kg, .css-12oz5g7 {
-    background-color: #ffffff !important;
-    border-right: 1px solid #e5e7eb;
+[data-baseweb="base-input"] { /* Inside selectbox */
+    background-color: var(--color-card) !important;
+    font-size: 0.875rem !important;
+    padding: 0.025rem 0.4rem !important; /* Align text better */
 }
 
-/* Sidebar Navigation */
-.sidebar-nav {
-    padding: 0.5rem;
-    margin: -1rem;
+[data-baseweb="menu"] { /* Dropdown menu */
+    background-color: var(--color-card) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--border-radius) !important;
+    box-shadow: var(--box-shadow) !important;
+    font-size: 0.875rem !important;
 }
 
-.nav-link {
-    display: flex;
-    align-items: center;
-    padding: 0.75rem 1rem;
-    margin: 0.25rem 0;
-    border-radius: 0.5rem;
-    color: #1f2937;
-    text-decoration: none;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    font-size: 0.95rem;
+[data-baseweb="menu"] li:hover, /* Dropdown item hover */
+[aria-selected="true"] { /* Dropdown item selected */
+    background-color: var(--color-info-bg) !important;
+    color: var(--color-accent) !important;
 }
 
-.nav-link:hover {
-    background-color: #f3f4f6;
-    color: #111827;
+
+/* Expander styling */
+.streamlit-expanderHeader {
+    background-color: transparent !important; /* Minimalist expander */
+    color: var(--color-text) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--border-radius) !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important; /* Make header more prominent */
+    padding: var(--spacing-sm) var(--spacing-sm) !important;
 }
 
-.nav-link.active {
-    background-color: #f3f4f6;
-    color: #111827;
-    font-weight: 600;
+.streamlit-expanderHeader:hover {
+    border-color: var(--color-accent) !important;
 }
 
-.nav-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
-    margin-right: 0.75rem;
-    font-size: 1.1rem;
-}
-
-/* Settings Section */
-.settings-section {
-    padding: 1rem;
-    margin-top: 2rem;
-    border-top: 1px solid #e5e7eb;
-}
-
-.version-info {
-    position: absolute;
-    bottom: 1rem;
-    left: 1rem;
-    font-size: 0.75rem;
-    color: #6b7280;
-}
-
-/* Hide Streamlit's default navigation elements */
-section[data-testid="stSidebar"] > div:first-child {
-    padding-top: 2rem;
-}
-
-section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div:first-child {
-    margin-top: -1rem;
+.streamlit-expanderContent {
+    background-color: var(--color-card) !important; /* Content area can have card bg */
+    color: var(--color-text) !important;
+    border: 1px solid var(--color-border) !important;
+    border-top: none !important; /* Remove top border as header has bottom */
+    border-radius: 0 0 var(--border-radius) var(--border-radius) !important;
+    padding: var(--spacing-sm) !important;
+    font-size: 0.875rem !important;
 }
 
 /* Hide Streamlit branding */
@@ -254,97 +452,105 @@ section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div:first
     visibility: hidden;
 }
 
-/* Custom info boxes */
-.info-box {
-    background-color: #f2f2f2;
-    border-left: 4px solid #404040;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    border-radius: 0 8px 8px 0;
-}
-
-.warning-box {
-    background-color: #f2f2f2;
-    border-left: 4px solid #666666;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    border-radius: 0 8px 8px 0;
-}
-
-.error-box {
-    background-color: #f2f2f2;
-    border-left: 4px solid #333333;
-    padding: 1rem;
-    margin-bottom: 1rem;
-    border-radius: 0 8px 8px 0;
-}
-
-/* Empty state styling */
-.empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
-    background-color: #f8f8f8;
-    border-radius: 8px;
-    margin-bottom: 1.5rem;
-}
-
-.empty-state-icon {
-    font-size: 3rem;
-    color: #e5e5e5;
-    margin-bottom: 1rem;
-}
-
-.empty-state-text {
-    color: #666666;
-    opacity: 0.7;
-    font-size: 1.1rem;
-}
-
-/* App header styling */
-.app-header {
-    display: flex;
-    align-items: center;
-    margin-bottom: 2rem;
-}
-
-.app-logo {
-    width: 80px;
-    margin-right: 1rem;
-}
-
-.app-title {
-    color: #404040 !important;
-    margin: 0;
-    font-size: 1.8rem;
-}
-
-.app-subtitle {
-    color: #666666;
-    margin: 0;
-    font-size: 1rem;
-}
-
-/* Data visualization styles */
-.plot-container {
-    background-color: #ffffff !important;
-    border-radius: 8px;
-    padding: 1rem;
-}
-
-/* Table styling */
+/* Dataframe styling */
 .dataframe {
-    background-color: #ffffff !important;
-    color: #1a1a1a !important;
+    font-size: 0.8125rem !important; /* 13px */
+    border: 1px solid var(--color-border) !important;
+    border-radius: var(--border-radius) !important;
 }
 
 .dataframe th {
-    background-color: #f2f2f2 !important;
-    color: #404040 !important;
-    border-color: #e5e5e5 !important;
+    background-color: var(--color-bg) !important; /* Light gray for header */
+    color: var(--color-text) !important;
+    font-weight: 500 !important;
+    padding: var(--spacing-xs) var(--spacing-sm) !important;
+    border-bottom: 1px solid var(--color-border) !important;
 }
 
 .dataframe td {
-    border-color: #e5e5e5 !important;
+    padding: var(--spacing-xs) var(--spacing-sm) !important;
+    border-bottom: 1px solid var(--color-border) !important;
+}
+.dataframe tr:last-child td {
+    border-bottom: none !important;
+}
+
+/* Custom info boxes */
+.info-box, .warning-box, .error-box, .success-box { /* Added success-box */
+    padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+    border-radius: var(--border-radius); /* Full border radius */
+    font-size: 0.875rem;
+    border: 1px solid; /* Add a full border */
+}
+
+.info-box {
+    background-color: var(--color-info-bg);
+    border-color: var(--color-accent);
+    color: var(--color-text); /* Ensure text is readable */
+}
+.info-box .bi { color: var(--color-accent); } /* Icon color matches accent */
+
+.warning-box {
+    background-color: rgba(255, 193, 7, 0.1); /* Lighter yellow background */
+    border-color: var(--color-warning);
+    color: var(--color-text);
+}
+.warning-box .bi { color: var(--color-warning); }
+
+.error-box {
+    background-color: rgba(220, 53, 69, 0.1); /* Lighter red background */
+    border-color: var(--color-danger);
+    color: var(--color-text);
+}
+.error-box .bi { color: var(--color-danger); }
+
+.success-box {
+    background-color: rgba(40, 167, 69, 0.1); /* Lighter green background */
+    border-color: var(--color-success);
+    color: var(--color-text);
+}
+.success-box .bi { color: var(--color-success); }
+
+
+/* Empty state styling */
+.empty-state { /* From icons.py */
+    text-align: center;
+    padding: var(--spacing-lg) var(--spacing-md);
+    background-color: var(--color-card);
+    border-radius: var(--border-radius);
+    margin-bottom: var(--spacing-md);
+    border: 1px solid var(--color-border);
+}
+
+.empty-state-icon { /* From icons.py */
+    font-size: 2.5rem; /* Larger icon */
+    color: var(--color-text-secondary);
+    margin-bottom: var(--spacing-sm);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.empty-state-icon i { /* From icons.py */
+    height: 2.5rem !important;
+    width: 2.5rem !important;
+}
+
+.empty-state-text { /* From icons.py */
+    color: var(--color-text-secondary);
+    opacity: 0.9;
+    font-size: 0.9375rem; /* 15px */
+}
+
+/* Version info */
+.version-info { /* From app.py */
+    position: absolute;
+    bottom: var(--spacing-sm);
+    left: var(--spacing-sm);
+    font-size: 0.75rem; /* 12px */
+    color: var(--color-text-secondary);
+    opacity: 0.7;
 }
 
 /* Custom dashboard layout helpers */
@@ -365,63 +571,45 @@ section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] > div:first
     .dashboard-col {
         flex: 0 0 100%;
     }
+    h1, .app-title { font-size: 1.5rem; }
+    h2 { font-size: 1.25rem; }
+    h3 { font-size: 1.125rem; }
 }
 
 /* Utility classes */
-.text-center {
-    text-align: center;
-}
+.text-center { text-align: center; }
+.mb-0 { margin-bottom: 0 !important; }
+.mb-2 { margin-bottom: 0.5rem !important; }
+.mt-2 { margin-top: 0.5rem !important; }
+.p-2 { padding: 0.5rem !important; }
 
-.mb-0 {
-    margin-bottom: 0 !important;
-}
-
-.mb-2 {
-    margin-bottom: 0.5rem !important;
-}
-
-.mt-2 {
-    margin-top: 0.5rem !important;
-}
-
-.p-2 {
-    padding: 0.5rem !important;
-}
-
-/* Fix for tooltip hover */
+/* Fix for tooltip hover (keep if needed, or remove if tooltips are styled) */
 [data-testid="stTooltip"] {
-    display: none !important;
+    /* display: none !important; */ /* Uncomment if you want to hide default tooltips */
+    /* Custom tooltip styling can go here if Streamlit allows */
 }
 
-/* Sidebar Navigation Buttons */
-.stSidebar [data-testid="stButton"] > button {
+/* Sidebar Navigation Buttons specific override (from old CSS, check if needed) */
+/* .stSidebar [data-testid="stButton"] > button {
     width: 100%;
-    background-color: transparent !important;
-    color: #1f2937 !important;
-    border: none !important;
-    text-align: left !important;
-    font-weight: normal !important;
-    padding: 0.5rem !important;
-    margin: 0 !important;
-    border-radius: 0.5rem !important;
-}
+    color: var(--color-text) !important;  Ensure this uses the new text color
+    font-weight: normal !important; Padding and margin are now in .stSidebar .stButton>button
+} */
 
-.stSidebar [data-testid="stButton"] > button:hover {
-    background-color: #f3f4f6 !important;
-    color: #111827 !important;
-}
+/* .stSidebar [data-testid="stButton"] > button:hover {
+    background-color: var(--color-button-hover-bg) !important;
+    color: var(--color-accent) !important;
+} */
 
-.stSidebar [data-testid="stButton"].active > button {
-    background-color: #f3f4f6 !important;
-    color: #111827 !important;
+/* .stSidebar [data-testid="stButton"].active > button {
+    background-color: var(--color-info-bg) !important;
+    color: var(--color-accent) !important;
     font-weight: 600 !important;
-}
+} */
 
-/* Navigation Icon Column */
-.stSidebar [data-testid="column"] {
-    padding: 0 !important;
-}
-
-.stSidebar [data-testid="column"]:first-child {
+/* Navigation Icon Column in Sidebar */
+.stSidebar [data-testid="column"]:first-child:has(div.nav-icon) { /* More specific selector */
     max-width: 40px !important;
+    padding-right: 0 !important; /* Remove padding if icon is centered in its column */
+    flex: 0 0 40px !important; /* Ensure it takes fixed width */
 } 

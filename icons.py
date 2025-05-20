@@ -2,8 +2,58 @@ import streamlit as st
 import base64
 from config import THEME_CONFIG
 
-def get_svg_icon(icon_path, color=THEME_CONFIG['DARK_COLOR'], width="24px", height="24px"):
-    """Generate an SVG icon with custom styling"""
+# Define a mapping of icon names to Bootstrap Icons classes
+def get_bootstrap_icon_class(icon_name):
+    """Map internal icon names to Bootstrap Icons classes"""
+    icon_map = {
+        # Dashboard icons
+        "dashboard": "bi-grid-1x2",
+        "analytics": "bi-bar-chart",
+        "chart": "bi-graph-up",
+        
+        # Calendar and appointments
+        "calendar": "bi-calendar",
+        "clock": "bi-clock",
+        "user": "bi-person",
+        
+        # Communication
+        "phone": "bi-telephone",
+        "mail": "bi-envelope",
+        "message": "bi-chat",
+        
+        # Integrations
+        "graph": "bi-diagram-3",
+        "airtable": "bi-table",
+        "link": "bi-link",
+        
+        # Tools
+        "tool": "bi-tools",
+        "search": "bi-search",
+        "upload": "bi-upload",
+        
+        # Content creation
+        "document": "bi-file-text",
+        "template": "bi-file-earmark-text",
+        "layout": "bi-layout-split",
+        
+        # Navigation and misc
+        "settings": "bi-gear",
+        "help": "bi-question-circle",
+        "alert": "bi-exclamation-triangle",
+        "close": "bi-x",
+        "check": "bi-check",
+        "refresh": "bi-arrow-clockwise",
+        "edit": "bi-pencil",
+        "trash": "bi-trash",
+        "info": "bi-info-circle",
+        "home": "bi-house"
+    }
+    
+    return icon_map.get(icon_name, "bi-exclamation-triangle")
+
+# Preserve existing SVG functions for backward compatibility
+def get_svg_icon(icon_path, color="var(--color-text-secondary)", width="24px", height="24px"):
+    """Generate an SVG icon with custom styling. Default color changed for light theme."""
     svg_content = f"""
     <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         {icon_path}
@@ -11,9 +61,9 @@ def get_svg_icon(icon_path, color=THEME_CONFIG['DARK_COLOR'], width="24px", heig
     """
     return svg_content
 
-def get_icon_html(icon_name, color=THEME_CONFIG['DARK_COLOR'], width="24px", height="24px", 
+def get_icon_html(icon_name, color="var(--color-text-secondary)", width="24px", height="24px", 
                  classes="", style=""):
-    """Get HTML for a specific icon with styling"""
+    """Get HTML for a specific icon with styling. Default color changed for light theme."""
     icon_paths = {
         # Dashboard icons
         "dashboard": "M3 3h7v9H3V3zm11 0h7v5h-7V3zm0 9h7v9h-7v-9zm-11 4h7v5H3v-5z",
@@ -60,16 +110,11 @@ def get_icon_html(icon_name, color=THEME_CONFIG['DARK_COLOR'], width="24px", hei
     }
     
     if icon_name not in icon_paths:
-        icon_name = "alert"  # Default to alert icon if not found
+        icon_name = "alert"
     
     icon_svg = get_svg_icon(icon_paths[icon_name], color, width, height)
-    
-    # Base64 encode the SVG content
     base64_svg = base64.b64encode(icon_svg.encode('utf-8')).decode('utf-8')
-    
-    # Create the HTML with classes and style
     icon_html = f'<img src="data:image/svg+xml;base64,{base64_svg}" class="{classes}" style="{style}" alt="{icon_name} icon">'
-    
     return icon_html
 
 def render_tab_bar(tabs, active_tab=None, callback=None):
@@ -78,90 +123,109 @@ def render_tab_bar(tabs, active_tab=None, callback=None):
     
     for i, (tab_id, tab_info) in enumerate(tabs.items()):
         is_active = active_tab == tab_id
-        tab_color = THEME_CONFIG['ACCENT_COLOR'] if is_active else THEME_CONFIG['DARK_COLOR']
+        # Use CSS variables for colors
+        tab_icon_color = "var(--color-accent)" if is_active else "var(--color-text-secondary)"
         
-        # Create the tab with label and icon displayed in the button
         with cols[i]:
-            # Create a unique key for the button to ensure it works properly
-            button_key = f"tab_{tab_id}_{i}"
+            button_key = f"tab_{tab_id}_{i}_{st.session_state.get('active_tab', '')}" # Ensure key uniqueness across main/sub tabs
             
-            # Get icon HTML to put before the button (can't put HTML in button directly)
-            icon_html = get_icon_html(tab_info['icon'], tab_color, "16px", "16px")
-            st.markdown(f"<div style='text-align: center; height: 20px;'>{icon_html}</div>", unsafe_allow_html=True)
+            icon_class = get_bootstrap_icon_class(tab_info.get('icon', 'info'))
             
-            # Create the actual button with proper label for accessibility
+            # Icon HTML for display above the button label. Position adjusted for new theme.
+            icon_html = f'<i class="{icon_class}" style="color: {tab_icon_color}; font-size: 1rem; display: inline-flex; align-items: center; justify-content: center; position: relative; top: 0px; margin-bottom: -2px;"></i>'
+            
+            # Button class for active state (handled by CSS)
+            button_class = "active" if is_active else ""
+
+            # The button itself will get its text color and other styles from CSS.
+            # We pass the icon_html and label to be part of the button content.
+            # Streamlit buttons don't directly support HTML content easily for label.
+            # So, keep markdown for icon and button for label.
+            
+            st.markdown(f"<div style='text-align: center; height: 1.2rem; margin-bottom:1px;'>{icon_html}</div>", unsafe_allow_html=True)
+            
             button_label = tab_info.get('label', tab_id.capitalize())
+            
+            # Add custom class to button via markdown if Streamlit adds official support.
+            # For now, rely on parent selectors or Streamlit's generated structure if possible.
+            # The .active class is applied to the button's PARENT div if we were using st_btn_select.
+            # Since we use st.button, we use CSS to target based on Streamlit's structure and :focus.
             
             if st.button(
                 button_label,
                 key=button_key,
                 use_container_width=True
+                # No 'class_name' argument for st.button
             ):
-                active_tab = tab_id
+                active_tab = tab_id # This will be the new active tab ID
                 if callback:
                     callback(tab_id)
+                # Rerun is typically handled by the main app logic after callback
     
-    # Add a separator line
-    st.markdown(f'<div style="height: 1px; background-color: #e5e7eb; margin-bottom: 20px;"></div>', 
+    # Separator line can be styled more minimally or removed if tabs have clear borders
+    st.markdown(f'<hr style="border: none; border-top: 1px solid var(--color-border); margin: 0 0 var(--spacing-md) 0;">', 
                 unsafe_allow_html=True)
     
     return active_tab
 
-def render_icon(icon_name, color=None, width="24px", height="24px", tooltip=""):
-    """Render an icon with optional tooltip"""
-    if color is None:
-        color = THEME_CONFIG['DARK_COLOR']
-        
-    icon_html = get_icon_html(icon_name, color, width, height)
+def render_icon(icon_name, color="var(--color-accent)", width="1em", height="1em", tooltip=""):
+    """Render an icon. Default color uses CSS accent. Size relative to font size."""
+    icon_class = get_bootstrap_icon_class(icon_name)
+    # CSS class .bi already handles most alignment. Inline style for specific color/size.
+    icon_html = f'<i class="{icon_class}" style="color: {color}; font-size: {width};"></i>'
     
-    # Remove tooltip functionality as requested
-    st.markdown(icon_html, unsafe_allow_html=True)
+    if tooltip: # Basic tooltip, consider Streamlit's native st.help or more robust solution if needed
+      st.markdown(f'<span title="{tooltip}">{icon_html}</span>', unsafe_allow_html=True)
+    else:
+      st.markdown(icon_html, unsafe_allow_html=True)
 
 def render_empty_state(message, icon_name=None, action_button=None):
     """Render an empty state with icon and optional action button"""
     if icon_name is None:
-        icon_name = "alert"
+        icon_name = "alert" # Default icon
         
+    icon_class = get_bootstrap_icon_class(icon_name)
+    
+    # Classes .empty-state, .empty-state-icon, .empty-state-text are styled in styles.css
     empty_state_html = f"""
     <div class="empty-state">
         <div class="empty-state-icon">
-            {get_icon_html(icon_name, THEME_CONFIG['LIGHT_COLOR'], "60px", "60px")}
+            <i class="{icon_class}"></i>
         </div>
         <div class="empty-state-text">
             {message}
         </div>
     </div>
     """
-    
     st.markdown(empty_state_html, unsafe_allow_html=True)
     
-    if action_button:
-        st.button(action_button)
+    if action_button: # action_button should be a dict like {'label': 'Click Me', 'key': 'empty_action_btn'}
+        if isinstance(action_button, dict) and 'label' in action_button:
+            if st.button(action_button['label'], key=action_button.get('key', 'empty_state_action')):
+                # Callback for action button would need to be handled in the calling function
+                pass 
+        elif isinstance(action_button, str): # Simple label
+             st.button(action_button)
 
 def render_info_box(message, box_type="info"):
-    """Render an info/warning/error box with an icon"""
+    """Render an info/warning/error/success box with an icon. Uses CSS classes for styling."""
     icon_map = {
-        "info": "info",
-        "warning": "alert",
-        "error": "alert",
-        "success": "check"
+        "info": "bi-info-circle-fill", # Using filled icons for info boxes
+        "warning": "bi-exclamation-triangle-fill",
+        "error": "bi-x-octagon-fill",
+        "success": "bi-check-circle-fill"
     }
+    # Box type will determine the class, e.g., "info-box", "warning-box"
+    # Colors and styling are handled by styles.css
     
-    color_map = {
-        "info": THEME_CONFIG['PRIMARY_COLOR'],
-        "warning": THEME_CONFIG['WARNING_COLOR'],
-        "error": THEME_CONFIG['DANGER_COLOR'],
-        "success": THEME_CONFIG['SUCCESS_COLOR']
-    }
+    icon_class = icon_map.get(box_type, "bi-info-circle-fill")
     
-    icon = icon_map.get(box_type, "info")
-    color = color_map.get(box_type, THEME_CONFIG['PRIMARY_COLOR'])
-    
+    # The icon color will be inherited or set by the .<box_type>-box .bi CSS rule
     box_html = f"""
     <div class="{box_type}-box">
         <div style="display: flex; align-items: flex-start;">
-            <div style="margin-right: 10px;">
-                {get_icon_html(icon, color)}
+            <div style="margin-right: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; /* Icon size */">
+                <i class="{icon_class}"></i>
             </div>
             <div>
                 {message}
@@ -169,24 +233,26 @@ def render_info_box(message, box_type="info"):
         </div>
     </div>
     """
-    
     st.markdown(box_html, unsafe_allow_html=True)
 
 def get_logo_base64():
-    """Generate a simple logo with initials ACA in SVG format and return as base64"""
+    """Generate a simple logo with initials ACA in SVG format and return as base64.
+       Updated for better visibility on light and dark themes if needed, or make it theme-agnostic.
+       Current logo has fill="#f8fafc" for background and fill="#1f2937" for text.
+       This is good for a light theme.
+    """
     svg_logo = """<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-        <rect width="100" height="100" rx="10" fill="#f8fafc"/>
-        <text x="50" y="60" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#1f2937" text-anchor="middle">ACA</text>
-        <path d="M20 80 L80 80" stroke="#7c3aed" stroke-width="4" stroke-linecap="round"/>
-        <path d="M30 70 L70 70" stroke="#6b7280" stroke-width="4" stroke-linecap="round"/>
+        <rect width="100" height="100" rx="10" fill="var(--color-card)"/> <!-- Use CSS var for bg -->
+        <text x="50" y="60" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="bold" fill="var(--color-text)" text-anchor="middle">ACA</text> <!-- Use CSS var for text -->
+        <path d="M20 80 L80 80" stroke="var(--color-accent)" stroke-width="4" stroke-linecap="round"/> <!-- Use CSS var for accent -->
+        <path d="M30 70 L70 70" stroke="var(--color-text-secondary)" stroke-width="4" stroke-linecap="round"/> <!-- Use CSS var for secondary -->
     </svg>"""
-    
-    # Base64 encode the SVG content
     base64_logo = base64.b64encode(svg_logo.encode('utf-8')).decode('utf-8')
     return base64_logo
 
-def render_logo(width="100px"):
+def render_logo(width="80px"): # Reduced default width for a more minimalist header
     """Render the application logo"""
     base64_logo = get_logo_base64()
-    logo_html = f'<img src="data:image/svg+xml;base64,{base64_logo}" width="{width}" alt="Access Care Analytics Logo">'
+    # The .app-logo class can define additional constraints if needed
+    logo_html = f'<img src="data:image/svg+xml;base64,{base64_logo}" width="{width}" alt="Access Care Analytics Logo" class="app-logo">'
     return logo_html 

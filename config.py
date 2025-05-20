@@ -128,6 +128,25 @@ AIRTABLE_BASES = {
             'NET_PROFIT_PERCENT': 'fldJGQ4NECEO8e8uW',
             'LAST_MODIFIED': 'fldVxMqI3Azfhlp1X'
         }
+    },
+    'KPI': {
+        'BASE_ID': 'appenAXVtP86f4M9z',  # Onsite Reporting Base
+        'TABLE_ID': 'tblzlzDIB1HuNIdgw',
+        'TABLE_NAME': 'Daily KPI',
+        'FIELDS': {
+            'ID': 'fldnPvdlg1ofaNImG',
+            'QUESTION': 'fldhPGfw6egYpp4Rx',
+            'SELECT': 'fldAtqKvshgDb1kYr',
+            'TAGS': 'fld0KGyhOQm45F60y',
+            'DATE': 'fldYnyaTAf9vM9SIO',
+            'PICTURES_POD_SETUP': 'fldQYS7eSLqjlS4ED',
+            'EARGYM_PROMOTION': 'fldcptj6a0EHtsnMv',
+            'CROSSBOOKING': 'fldPHIRIZm77Puwy0',
+            'BOTD_EOD_FILLED': 'fldC73HUBZK5XKr3E',
+            'PHOTOS_VIDEOS_TESTIMONIALS': 'fldpNQsUV59WsAFK5',
+            'XRAYS_DENTAL_NOTES_UPLOADED': 'fldEpdMFzJIEXFERD',
+            'IF_NO_WHY': 'fldtUCvGpspiqmSWz'
+        }
     }
 }
 
