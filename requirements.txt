@@ -9,6 +9,9 @@ msgraph-core==1.0.0
 msgraph-sdk==1.0.0
 streamlit-extras==0.3.5
 
+# For phone number validation and formatting
+phonenumbers==8.13.24
+
 # For webhook server and env loading
 fastapi==0.109.2
 uvicorn[standard]==0.27.0
