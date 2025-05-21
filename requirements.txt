@@ -13,7 +13,7 @@ streamlit-extras==0.3.5
 azure-identity==1.15.0 
 azure-core==1.30.0
 msal==1.25.0
-kiota-abstractions==1.0.0
+microsoft-kiota-abstractions==1.9.3
 
 # Microsoft Graph API dependencies
 msgraph-beta-sdk==1.0.0
@@ -42,7 +42,7 @@ thefuzz==0.20.0
 python-Levenshtein==0.21.1 # Recommended for thefuzz performance
 
 # Date and time handling
-tzlocal==5.2.1
+tzlocal==5.3.1
 
 # For error reporting and debugging
 traceback2==1.4.0
