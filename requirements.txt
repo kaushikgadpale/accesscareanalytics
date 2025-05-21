@@ -9,18 +9,30 @@ msgraph-core==1.0.0
 msgraph-sdk==1.0.0
 streamlit-extras==0.3.5
 
+# Azure authentication
+azure-identity==1.15.0 
+azure-core==1.30.0
+msal==1.25.0
+kiota-abstractions==1.0.0
+
+# Microsoft Graph API dependencies
+msgraph-beta-sdk==1.0.0
+
 # For phone number validation and formatting
 phonenumbers==8.13.24
 
 # For webhook server and env loading
 fastapi==0.109.2
 uvicorn[standard]==0.27.0
-msal==1.25.0
+
+# UI elements
+pillow==10.2.0  # For image processing
 
 # Additional dependencies
 aiohttp==3.9.1
 python-multipart==0.0.6
 httpx==0.26.0
+asyncio==3.4.3
 
 # For .docx file handling
 python-docx==0.8.11
@@ -28,3 +40,9 @@ python-docx==0.8.11
 # For fuzzy string matching
 thefuzz==0.20.0
 python-Levenshtein==0.21.1 # Recommended for thefuzz performance
+
+# Date and time handling
+tzlocal==5.2.1
+
+# For error reporting and debugging
+traceback2==1.4.0
