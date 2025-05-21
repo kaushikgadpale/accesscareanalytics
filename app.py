@@ -17,6 +17,8 @@ import asyncio
 from streamlit_extras.stylable_container import stylable_container
 from streamlit_extras.app_logo import add_logo
 from streamlit_extras.colored_header import colored_header
+from thefuzz import fuzz # For fuzzy matching
+import traceback
 
 # Import custom modules
 from config import THEME_CONFIG, DATE_PRESETS, APP_TAGLINE, LOGO_PATH, AIRTABLE_CONFIG
@@ -27,9 +29,22 @@ from icons import render_logo, render_tab_bar, render_icon, render_empty_state, 
 from sow_creator import render_sow_creator
 from airtable_export import render_export_options, export_bookings_to_airtable, export_patients_to_airtable, analyze_airtable_data
 
+# Ensure thefuzz is properly imported
+try:
+    from thefuzz import fuzz
+except ImportError:
+    # If thefuzz is not available, provide a stub implementation
+    print("WARNING: thefuzz module not found. Fuzzy matching will not work.")
+    class DummyFuzz:
+        @staticmethod
+        def ratio(str1, str2):
+            print(f"WARNING: Using dummy fuzz.ratio for {str1} and {str2}")
+            return 0
+    fuzz = DummyFuzz
+
 # Page configuration
 st.set_page_config(
-    page_title="Main",
+    page_title="MS Booking",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -121,7 +136,7 @@ def render_app_header():
 
 # Tab definitions for the main navigation
 MAIN_TABS = {
-    "dashboard": {"icon": "analytics", "label": "Main"},
+    "dashboard": {"icon": "analytics", "label": "MS Booking"},
     "tools": {"icon": "tool", "label": "Tools"},
     "integrations": {"icon": "link", "label": "Integrations"},
     "content": {"icon": "document", "label": "Content Creator"}
@@ -140,6 +155,7 @@ SUBTABS = {
     },
     "tools": {
         "phone_validation": {"icon": "phone", "label": "Phone Validation"},
+        "outlook_prep": {"icon": "bi-person-lines-fill", "label": "Outlook Import Prep"}, # New Sub-tab
         "api_inspector": {"icon": "search", "label": "API Inspector"},
         "date_tools": {"icon": "clock", "label": "Date Tools"}
     },
@@ -974,10 +990,13 @@ def render_dashboard_tab(active_subtab):
                                 x='Service',
                                 y='Patient_Count',
                                 title='Top 10 Services by Number of Patients',
-                                text_auto=True,
+                                text='Patient_Count',  # Use the column directly
                                 color='Patient_Count',
                                 color_continuous_scale='Viridis'
                             )
+                            
+                            # Add proper text formatting
+                            fig.update_traces(texttemplate='%{text:,}', textposition='outside')
                             
                             fig.update_layout(
                                 xaxis_title='Service',
@@ -1013,10 +1032,13 @@ def render_dashboard_tab(active_subtab):
                             x='Frequency',
                             y='Patient_Count',
                             title='Patient Visit Frequency Distribution',
-                            text_auto=True,
+                            text='Patient_Count',  # Use the column directly
                             color='Patient_Count',
                             color_continuous_scale='Viridis'
                         )
+                        
+                        # Add proper text formatting
+                        fig.update_traces(texttemplate='%{text:,}', textposition='outside')
                         
                         fig.update_layout(
                             xaxis_title='Visit Frequency',
@@ -1149,10 +1171,16 @@ def render_dashboard_tab(active_subtab):
                             st.info("No data available for the selected date range.")
                     except Exception as e:
                         st.error(f"Error processing booking creation analysis: {str(e)}")
+                        # Add traceback for better error detection
+                        st.code(traceback.format_exc(), language="python")
+                        # Also print to terminal for easier debugging
+                        print(f"ERROR in booking creation analysis: {str(e)}")
+                        print(traceback.format_exc())
                 
                 # Analysis based on booking date
                 if 'Start Date' in filtered_df.columns:
                     st.subheader("Booking Date Analysis")
+                    
                     
                     # Filter by date range using timestamps for comparison
                     try:
@@ -1364,9 +1392,12 @@ def render_dashboard_tab(active_subtab):
                                     y='Total Appointments',
                                     title='Total Appointments by Year',
                                     color='Total Appointments',
-                                    text_auto=True
+                                    text='Total Appointments'  # Use the column directly
                                 )
                                 
+                                # Add proper text formatting
+                                fig_yearly_totals.update_traces(texttemplate='%{text:,}', textposition='outside')
+
                                 fig_yearly_totals.update_layout(
                                     xaxis_title="Year",
                                     yaxis_title="Total Appointments",
@@ -1522,128 +1553,172 @@ def render_tools_tab(active_subtab):
     if active_subtab == "phone_validation":
         st.header("Phone Validation Tool")
         
-        # Show introduction
-        st.markdown("""
-        <div class="card">
-            <h3>Phone Number Validation</h3>
-            <p>Validate and format phone numbers from your patient database or uploaded files.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Create two methods: Use existing data or upload new data
-        method_tabs = st.radio(
-            "Select Data Source", 
-            ["Validate Existing Data", "Upload New Data"],
-            horizontal=True
+        # Radio button to select data source
+        source_choice = st.radio(
+            "Select Data Source for Phone Validation:",
+            ("Validate from Fetched Appointments", "Upload New File"),
+            horizontal=True,
+            key="phone_validation_source_choice"
         )
-        
-        if method_tabs == "Validate Existing Data":
-            # Check if we have data
-            if st.session_state.get('bookings_data') is not None:
-                df = st.session_state.bookings_data
-                
-                # Check if there are phone numbers
-                if "Phone" in df.columns:
-                    # Display phone stats
-                    st.subheader("Phone Number Statistics")
+        st.markdown("<hr style='margin-top: 0.5rem; margin-bottom: 1rem;'>", unsafe_allow_html=True)
+
+        if source_choice == "Validate from Fetched Appointments":
+            st.markdown("#### Validate Phones from Fetched Appointment Data")
+            if 'bookings_data' in st.session_state and st.session_state.bookings_data is not None and not st.session_state.bookings_data.empty:
+                df_bookings = st.session_state.bookings_data
+                if 'Phone' in df_bookings.columns:
+                    st.info(f"Found {len(df_bookings)} records in fetched appointments. The 'Phone' column will be used for validation.")
                     
-                    # Create mock phone analysis
-                    status_data = pd.DataFrame({
-                        "Status": ["Valid", "Invalid", "Missing", "Unknown"],
-                        "Count": [85, 12, 8, 5]
-                    })
+                    # Use a different session state key for results from bookings data to avoid clashes
+                    if 'phone_validation_results_bookings' not in st.session_state:
+                        st.session_state.phone_validation_results_bookings = None
+                    if 'phone_validation_summary_bookings' not in st.session_state:
+                        st.session_state.phone_validation_summary_bookings = None
+
+                    if st.button("Validate Phones from Appointments", type="primary", use_container_width=True, key="validate_phones_from_bookings_btn"):
+                        with st.spinner("Validating phone numbers from appointments..."):
+                            # --- Replicate validation logic --- 
+                            results = []
+                            valid_count = 0
+                            invalid_count = 0
+                            empty_count = 0
+                            for index, row in df_bookings.iterrows():
+                                original_phone = str(row['Phone']) if pd.notna(row['Phone']) else ""
+                                formatted_phone, is_valid = format_phone_strict(original_phone)
+                                status = "Empty" if not original_phone else ("Valid" if is_valid else "Invalid")
+                                if status == "Valid": valid_count += 1
+                                elif status == "Invalid": invalid_count += 1
+                                else: empty_count += 1
+                                
+                                result_row = row.to_dict()
+                                result_row['Original Phone Value'] = original_phone
+                                result_row['Formatted Phone'] = formatted_phone
+                                result_row['Validation Status'] = status
+                                results.append(result_row)
+                            # --- End Replicated Logic ---
+                            results_df_bookings = pd.DataFrame(results)
+                            st.session_state.phone_validation_results_bookings = results_df_bookings
+                            st.session_state.phone_validation_summary_bookings = {
+                                "total_processed": len(results_df_bookings),
+                                "valid": valid_count, "invalid": invalid_count, "empty": empty_count
+                            }
+                            st.success(f"Processed {len(results_df_bookings)} phone numbers from appointments.")
                     
-                    # Create a pie chart
-                    fig = px.pie(
-                        status_data,
-                        values="Count",
-                        names="Status",
-                        title="Phone Number Validation Results",
-                        template="plotly_dark",
-                        color_discrete_map={
-                            "Valid": THEME_CONFIG['SUCCESS_COLOR'],
-                            "Invalid": THEME_CONFIG['DANGER_COLOR'],
-                            "Missing": THEME_CONFIG['WARNING_COLOR'],
-                            "Unknown": THEME_CONFIG['LIGHT_COLOR']
-                        }
-                    )
-                    
-                    fig.update_layout(
-                        plot_bgcolor=THEME_CONFIG['CARD_BG'],
-                        paper_bgcolor=THEME_CONFIG['CARD_BG'],
-                        font_color=THEME_CONFIG['TEXT_COLOR'],
-                        title_font_color=THEME_CONFIG['PRIMARY_COLOR'],
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Show table of phone numbers
-                    st.subheader("Phone Number Details")
-                    
-                    # Create a version of the dataframe with validated phones
-                    validated_df = df[["Customer", "Phone"]].drop_duplicates()
-                    validated_df["Validated Phone"] = validated_df["Phone"].apply(
-                        lambda x: f"+1 ({x[0:3]}) {x[3:6]}-{x[6:10]}" if len(str(x)) == 10 else str(x)
-                    )
-                    validated_df["Status"] = validated_df["Phone"].apply(
-                        lambda x: "Valid" if len(str(x)) == 10 else "Invalid"
-                    )
-                    
-                    # Display the validated data
-                    st.dataframe(validated_df, use_container_width=True)
-                    
-                    # Download option
-                    csv = validated_df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "Download Validated Phone Numbers",
-                        csv,
-                        "validated_phones.csv",
-                        "text/csv",
-                        key="download-phones"
-                    )
+                    # Display results if available (for bookings data)
+                    if st.session_state.phone_validation_results_bookings is not None:
+                        results_df_to_display = st.session_state.phone_validation_results_bookings
+                        summary_to_display = st.session_state.phone_validation_summary_bookings
+                        # Call a helper to display results (to avoid code duplication)
+                        display_phone_validation_output(results_df_to_display, summary_to_display, results_type="bookings")
+
                 else:
-                    render_empty_state(
-                        "No phone number data found in the current dataset.",
-                        "phone"
-                    )
+                    st.warning("No 'Phone' column found in the fetched appointments data.")
             else:
-                # Show empty state
-                render_empty_state(
-                    "No data available. Please fetch appointment data first.",
-                    "phone"
-                )
-                
-        elif method_tabs == "Upload New Data":
-            st.subheader("Upload Contact Data")
-            
-            # File uploader
-            uploaded_file = st.file_uploader("Upload CSV or Excel file with phone numbers", type=["csv", "xlsx"])
+                st.warning("No appointments data has been fetched yet. Please go to Dashboard > Appointments to fetch data first.")
+        
+        elif source_choice == "Upload New File":
+            st.markdown("#### Validate Phones from Uploaded File")
+            # Existing file upload and validation logic starts here
+            # Initialize session state for phone validation results (for uploaded file)
+            if 'phone_validation_results_upload' not in st.session_state:
+                st.session_state.phone_validation_results_upload = None
+            if 'phone_validation_summary_upload' not in st.session_state:
+                st.session_state.phone_validation_summary_upload = None
+            # Ensure the introduction/card for this section is present
+            st.markdown("""
+            <div class="card">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <i class="bi bi-upload" style="font-size: 1.5rem; color: var(--color-primary-action);"></i>
+                    <h3 style="margin:0;">Upload Contact File</h3>
+                </div>
+                <p>Upload a CSV or Excel file with contact data to validate phone numbers.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            uploaded_file = st.file_uploader(
+                "Upload CSV or Excel file", 
+                type=["csv", "xlsx"], 
+                key="phone_file_uploader",
+                help="Ensure your file has a header row. You'll be asked to select the phone number column after upload."
+            )
             
             if uploaded_file is not None:
-                st.success(f"File '{uploaded_file.name}' uploaded successfully!")
-                
-                # Create mock validated data
-                mock_data = pd.DataFrame({
-                    "Original Phone": ["1234567890", "555-123-4567", "(800) 123-4567", "+1 (888) 555-1212"],
-                    "Validated Phone": ["+1 (123) 456-7890", "+1 (555) 123-4567", "+1 (800) 123-4567", "+1 (888) 555-1212"],
-                    "Status": ["Valid", "Valid", "Valid", "Valid"] 
-                })
-                
-                # Display the mock validated data
-                st.subheader("Validation Results")
-                st.dataframe(mock_data, use_container_width=True)
-                
-                # Download option
-                csv = mock_data.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    "Download Validated Phone Numbers",
-                    csv,
-                    "validated_phones.csv",
-                    "text/csv",
-                    key="download-uploaded-phones"
-                )
-    
+                try:
+                    if uploaded_file.name.endswith('.csv'):
+                        df_upload = pd.read_csv(uploaded_file)
+                    else:
+                        df_upload = pd.read_excel(uploaded_file)
+                    
+                    st.success(f"File '{uploaded_file.name}' uploaded successfully with {len(df_upload)} rows.")
+                    st.session_state.uploaded_phone_df = df_upload
+
+                except Exception as e:
+                    st.error(f"Error reading file: {e}")
+                    st.session_state.uploaded_phone_df = None
+
+                # This is the block that was duplicated. We want to keep only one instance of it.
+                if "uploaded_phone_df" in st.session_state and st.session_state.uploaded_phone_df is not None:
+                    df_upload = st.session_state.uploaded_phone_df
+                    if not df_upload.empty:
+                        st.markdown("#### Select Phone Number Column")
+                        column_options = [""] + df_upload.columns.tolist()
+                        phone_column = st.selectbox(
+                            "Which column contains the phone numbers?", 
+                            column_options,
+                            index=0,
+                            key="phone_column_selector_unique", # Changed key to avoid conflict if GUI renders faster than state updates
+                            help="Choose the column from your uploaded file that has the phone numbers to validate."
+                        )
+
+                        if phone_column:
+                            if st.button("Validate Phone Numbers", type="primary", use_container_width=True, key="validate_phones_button_unique"): # Changed key
+                                with st.spinner(f"Validating phone numbers in column '{phone_column}'... Please wait."):
+                                    results = []
+                                    valid_count = 0
+                                    invalid_count = 0
+                                    empty_count = 0
+                                    
+                                    for index, row in df_upload.iterrows():
+                                        original_phone = str(row[phone_column]) if pd.notna(row[phone_column]) else ""
+                                        formatted_phone, is_valid = format_phone_strict(original_phone)
+                                        
+                                        status = ""
+                                        if not original_phone:
+                                            status = "Empty"
+                                            empty_count += 1
+                                        elif is_valid:
+                                            status = "Valid"
+                                            valid_count +=1
+                                        else:
+                                            status = "Invalid"
+                                            invalid_count +=1
+                                        
+                                        result_row = row.to_dict()
+                                        result_row['Original Phone Value'] = original_phone
+                                        result_row['Formatted Phone'] = formatted_phone
+                                        result_row['Validation Status'] = status
+                                        results.append(result_row)
+                                    
+                                    results_df_upload = pd.DataFrame(results) # Use a different df name
+                                    st.session_state.phone_validation_results_upload = results_df_upload
+                                    
+                                    st.session_state.phone_validation_summary_upload = {
+                                        "total_processed": len(results_df_upload),
+                                        "valid": valid_count,
+                                        "invalid": invalid_count,
+                                        "empty": empty_count
+                                    }
+                                    st.success(f"Processed {len(results_df_upload)} phone numbers from uploaded file.")
+            
+            # Display results if available (for uploaded file)
+            if st.session_state.phone_validation_results_upload is not None:
+                results_df_to_display = st.session_state.phone_validation_results_upload
+                summary_to_display = st.session_state.phone_validation_summary_upload
+                display_phone_validation_output(results_df_to_display, summary_to_display, results_type="upload")
+
+    elif active_subtab == "outlook_prep": # New sub-tab handler
+        render_outlook_import_prep_tool()
+
     elif active_subtab == "api_inspector":
         st.header("API Inspector Tool")
         
@@ -2205,6 +2280,759 @@ def analyze_unique_patients(df):
         return unique_patients, service_distribution
     
     return unique_patients, pd.DataFrame()
+
+# Helper function to display phone validation output (to reduce duplication)
+def display_phone_validation_output(results_df, summary, results_type="general"):
+    st.markdown("---")
+    st.markdown("#### Validation Results")
+    st.dataframe(results_df, use_container_width=True, height=400)
+
+    if summary:
+        st.markdown("##### Validation Summary")
+        m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+        m_col1.metric("Total Processed", summary.get('total_processed', 0))
+        valid_pct = (summary.get('valid',0)/summary.get('total_processed',1)) if summary.get('total_processed',0) > 0 else 0
+        invalid_pct = (summary.get('invalid',0)/summary.get('total_processed',1)) if summary.get('total_processed',0) > 0 else 0
+        empty_pct = (summary.get('empty',0)/summary.get('total_processed',1)) if summary.get('total_processed',0) > 0 else 0
+
+        m_col2.metric("Valid Numbers", summary.get('valid',0), f"{valid_pct:.1%}")
+        m_col3.metric("Invalid Numbers", summary.get('invalid',0), f"{invalid_pct:.1%}")
+        m_col4.metric("Empty Fields", summary.get('empty',0), f"{empty_pct:.1%}")
+
+        if summary.get('total_processed',0) > 0:
+            status_data = pd.DataFrame({
+                'Status': ['Valid', 'Invalid', 'Empty'],
+                'Count': [summary.get('valid',0), summary.get('invalid',0), summary.get('empty',0)]
+            })
+            status_data = status_data[status_data['Count'] > 0]
+
+            if not status_data.empty:
+                fig_status_pie = px.pie(status_data, 
+                             values='Count', 
+                             names='Status', 
+                             title='Phone Number Validation Status',
+                             color='Status',
+                             color_discrete_map={'Valid': '#28a745', 'Invalid': '#dc3545', 'Empty': '#6c757d'})
+                fig_status_pie.update_traces(textposition='inside', textinfo='percent+label+value')
+                st.plotly_chart(fig_status_pie, use_container_width=True)
+            else:
+                st.info("No data to display in the validation status chart.")
+        
+        if summary.get('valid', 0) > 0:
+            st.markdown("##### Country Analysis of Valid Numbers")
+            valid_numbers_df = results_df[results_df['Validation Status'] == 'Valid'].copy()
+            
+            if not valid_numbers_df.empty:
+                # Extract country information from the "Validation Status" column directly
+                # This ensures we use only the countries actually identified in the data
+                
+                # First, check if we have a "Validation Status" column with values like "Valid (Country)"
+                if "Validation Status" in valid_numbers_df.columns and valid_numbers_df["Validation Status"].str.contains(r"Valid \(.*\)").any():
+                    # Extract country names from status like "Valid (US)"
+                    valid_numbers_df['Country'] = valid_numbers_df['Validation Status'].str.extract(r'Valid \((.*?)\)', expand=False)
+                    
+                    # Handle any rows where extraction failed
+                    valid_numbers_df.loc[valid_numbers_df['Country'].isna(), 'Country'] = "Other"
+                    
+                    # Count countries
+                    country_counts = valid_numbers_df['Country'].value_counts().reset_index()
+                    country_counts.columns = ['Country', 'Count']
+                    
+                    # Only proceed if we have country data
+                    if not country_counts.empty:
+                        # Sort by count in descending order
+                        display_counts = country_counts.sort_values(by='Count', ascending=False)
+                        
+                        fig_country_bar = px.bar(
+                            display_counts,
+                            x='Country',
+                            y='Count',
+                            title=f'Phone Numbers by Country ({len(display_counts)} countries found)',
+                            labels={'Count': 'Number of Valid Phones', 'Country': 'Country'},
+                            color='Country'
+                        )
+                        fig_country_bar.update_layout(
+                            xaxis_title="Country", 
+                            yaxis_title="Number of Valid Phones", 
+                            height=500,
+                            xaxis={'tickangle': -45} # Angled labels for better readability
+                        )
+                        st.plotly_chart(fig_country_bar, use_container_width=True)
+                        st.caption("Country identification is based on phone number formats in your data.")
+                    else:
+                        st.info("No country information found in the valid phone numbers.")
+                else:
+                    # Fall back to extracting country codes from formatted phone numbers if status doesn't contain country info
+                    def extract_country_code(phone_str):
+                        if pd.isna(phone_str) or not isinstance(phone_str, str):
+                            return "Unknown"
+                        
+                        # More robust country code extraction
+                        match = re.match(r"^\+(\d{1,3})(?:\s*\(?)", phone_str)
+                        if match:
+                            # Map country codes to proper country names
+                            country_code = match.group(1)
+                            country_map = {
+                                "1": "US/CA",      # United States/Canada
+                                "44": "UK",        # United Kingdom
+                                "353": "IE",       # Ireland
+                                "971": "UAE",      # UAE/Dubai
+                                "45": "DK",        # Denmark
+                                "63": "PH",        # Philippines
+                                "91": "IN",        # India
+                                "61": "AU",        # Australia
+                                "52": "MX",        # Mexico
+                                "55": "BR",        # Brazil
+                                "49": "DE",        # Germany
+                                "33": "FR",        # France
+                                "34": "ES",        # Spain
+                                "86": "CN",        # China
+                                "81": "JP",        # Japan
+                                "82": "KR",        # South Korea
+                                "39": "IT",        # Italy
+                                "31": "NL",        # Netherlands
+                                "64": "NZ",        # New Zealand
+                                "54": "AR",        # Argentina
+                                "27": "ZA"         # South Africa
+                            }
+                            # Return the country name or use the code if not in our map
+                            return country_map.get(country_code, f"Country +{country_code}")
+                        return "Unknown"
+
+                    valid_numbers_df.loc[:, 'Country'] = valid_numbers_df['Formatted Phone'].apply(extract_country_code)
+                    
+                    # Count countries
+                    country_counts = valid_numbers_df['Country'].value_counts().reset_index()
+                    country_counts.columns = ['Country', 'Count']
+                    
+                    # Remove unknown countries
+                    known_country_counts = country_counts[country_counts['Country'] != "Unknown"]
+                    
+                    if not known_country_counts.empty:
+                        # Sort by count in descending order
+                        display_counts = known_country_counts.sort_values(by='Count', ascending=False)
+                        
+                        fig_country_bar = px.bar(
+                            display_counts,
+                            x='Country',
+                            y='Count',
+                            title=f'Phone Numbers by Country ({len(display_counts)} countries found)',
+                            labels={'Count': 'Number of Valid Phones', 'Country': 'Country'},
+                            color='Country'
+                        )
+                        fig_country_bar.update_layout(
+                            xaxis_title="Country", 
+                            yaxis_title="Number of Valid Phones", 
+                            height=500,
+                            xaxis={'tickangle': -45} # Angled labels for better readability
+                        )
+                        st.plotly_chart(fig_country_bar, use_container_width=True)
+                        st.caption("Country identification is based on phone number formats in your data.")
+                    else:
+                        st.info("No country information found in the valid phone numbers.")
+            else:
+                st.info("No valid numbers found for country analysis.")
+    else:
+        st.info("Validation summary data is not available.")
+
+    dl_col1, dl_col2 = st.columns(2)
+    with dl_col1:
+        csv_all = results_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download All Results (CSV)",
+            data=csv_all,
+            file_name=f"phone_validation_all_results_{results_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv",
+            type="primary",
+            use_container_width=True,
+            key=f"download_phone_all_results_{results_type}"
+        )
+    with dl_col2:
+        valid_df = results_df[results_df['Validation Status'] == 'Valid']
+        if not valid_df.empty:
+            csv_valid = valid_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="Download Valid Numbers Only (CSV)",
+                data=csv_valid,
+                file_name=f"phone_validation_valid_only_{results_type}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                type="secondary",
+                use_container_width=True,
+                key=f"download_phone_valid_only_{results_type}"
+            )
+        else:
+            st.button("Download Valid Numbers Only (CSV)", disabled=True, use_container_width=True, help="No valid phone numbers found to download.", key=f"download_phone_valid_disabled_{results_type}")
+
+# --- Outlook Import Prep Tool --- 
+def render_outlook_import_prep_tool():
+    st.header("Outlook Contact Import Preparation Tool")
+    
+    # Add debugging panel
+    with st.expander("⚠️ Debug Information", expanded=False):
+        st.markdown("### Session State Debugging")
+        st.write("Current step:", st.session_state.get("outlook_prep_step", "No step set"))
+        st.write("Has uploaded data:", "outlook_prep_uploaded_df" in st.session_state)
+        st.write("Has column mapping:", "outlook_prep_column_mapping" in st.session_state)
+        st.write("Has analysis results:", "outlook_prep_analysis_results" in st.session_state)
+        
+        if "outlook_prep_analysis_results" in st.session_state and st.session_state.outlook_prep_analysis_results:
+            st.write("Analysis results keys:", list(st.session_state.outlook_prep_analysis_results.keys()))
+            
+        if st.button("Reset Tool State"):
+            for key in list(st.session_state.keys()):
+                if key.startswith("outlook_prep_"):
+                    del st.session_state[key]
+            st.success("Tool state has been reset")
+            st.rerun()
+
+    # Add the introduction card
+    st.markdown("""
+    <div class="card">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+            <i class="bi bi-person-check-fill" style="font-size: 1.5rem; color: var(--color-primary-action);"></i>
+            <h3 style="margin:0;">Prepare Contacts for Outlook Import</h3>
+        </div>
+        <p>This tool helps you analyze and clean a CSV file (typically an Outlook export) before re-importing to Outlook. 
+        It identifies potential duplicates, validates phone numbers, and flags common issues.</p>
+        <ul>
+            <li>Upload your CSV file (e.g., an export from Outlook).</li>
+            <li>Map your file's columns to standard contact fields.</li>
+            <li>Configure duplicate detection criteria.</li>
+            <li>Review the analysis and (soon) download a cleaned/annotated file.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Initialize session state for this tool
+    if 'outlook_prep_uploaded_df' not in st.session_state:
+        st.session_state.outlook_prep_uploaded_df = None
+    if 'outlook_prep_column_mapping' not in st.session_state:
+        st.session_state.outlook_prep_column_mapping = {}
+    if 'outlook_prep_analysis_results' not in st.session_state:
+        st.session_state.outlook_prep_analysis_results = None
+
+    # Define target internal fields (keys) and their typical Outlook export names (values for default mapping)
+    TARGET_FIELDS = {
+        "FirstName": "First Name",
+        "MiddleName": "Middle Name",
+        "LastName": "Last Name",
+        "Email1": "E-mail Address",
+        "Email2": "E-mail 2 Address",
+        "Email3": "E-mail 3 Address",
+        "MobilePhone": "Mobile Phone",
+        "HomePhone": "Home Phone",
+        "BusinessPhone": "Business Phone",
+        # Add other fields as needed, e.g., Company, JobTitle, Addresses
+    }
+
+    uploaded_file_outlook = st.file_uploader(
+        "Upload Outlook Export CSV File",
+        type=["csv"],
+        key="outlook_prep_uploader",
+        help="Upload the CSV file you exported from Outlook or intend to import."
+    )
+
+    if uploaded_file_outlook is not None:
+        try:
+            df = pd.read_csv(uploaded_file_outlook)
+            st.session_state.outlook_prep_uploaded_df = df
+            st.success(f"Successfully uploaded '{uploaded_file_outlook.name}' with {len(df)} rows and {len(df.columns)} columns.")
+            # Reset previous mapping and results if a new file is uploaded
+            st.session_state.outlook_prep_column_mapping = {}
+            st.session_state.outlook_prep_analysis_results = None 
+        except Exception as e:
+            st.error(f"Error reading CSV file: {e}")
+            st.session_state.outlook_prep_uploaded_df = None
+
+    if st.session_state.outlook_prep_uploaded_df is not None:
+        df = st.session_state.outlook_prep_uploaded_df
+        st.markdown("---")
+        st.markdown("#### 1. Map Your CSV Columns")
+        st.markdown("""Match the columns from your uploaded CSV to the standard contact fields. 
+                    The tool will try to guess based on common Outlook export names.""", unsafe_allow_html=False) # Explicitly set unsafe_allow_html=False as it's not HTML
+
+        available_csv_columns = ["<Not Mapped>"] + df.columns.tolist()
+        current_mapping = st.session_state.outlook_prep_column_mapping.copy()
+
+        cols_per_row = 3
+        field_keys = list(TARGET_FIELDS.keys())
+        
+        for i in range(0, len(field_keys), cols_per_row):
+            row_field_keys = field_keys[i:i+cols_per_row]
+            map_cols = st.columns(cols_per_row)
+            for idx, field_key in enumerate(row_field_keys):
+                with map_cols[idx]:
+                    # Attempt default mapping
+                    default_outlook_name = TARGET_FIELDS[field_key]
+                    default_index = 0
+                    if default_outlook_name in available_csv_columns:
+                        default_index = available_csv_columns.index(default_outlook_name)
+                    elif field_key in available_csv_columns: # Fallback to internal key name if it exists as a header
+                        default_index = available_csv_columns.index(field_key)
+                    
+                    # If already mapped, use that, otherwise use default
+                    selected_column = current_mapping.get(field_key, available_csv_columns[default_index])
+                    if selected_column not in available_csv_columns: # handle case where previously mapped col no longer exists
+                        selected_column = "<Not Mapped>"
+                        current_mapping[field_key] = "<Not Mapped>"
+                    else:
+                         current_mapping[field_key] = selected_column # ensure it is in current_mapping for the selectbox
+
+                    mapped_col = st.selectbox(
+                        f"Map: **{field_key}** (Standard Field)",
+                        options=available_csv_columns,
+                        index=available_csv_columns.index(selected_column),
+                        key=f"map_{field_key}"
+                    )
+                    current_mapping[field_key] = mapped_col if mapped_col != "<Not Mapped>" else None
+        
+        st.session_state.outlook_prep_column_mapping = {k: v for k, v in current_mapping.items() if v is not None}
+
+        if st.button("Proceed to Duplicate Detection Setup", type="primary"):
+            # Basic check: Ensure at least one critical field is mapped for duplicate checking
+            mapped_fields_for_dup_check = [
+                st.session_state.outlook_prep_column_mapping.get("Email1"),
+                st.session_state.outlook_prep_column_mapping.get("MobilePhone"),
+                (st.session_state.outlook_prep_column_mapping.get("FirstName") and st.session_state.outlook_prep_column_mapping.get("LastName"))
+            ]
+            if not any(mapped_fields_for_dup_check):
+                st.error("Please map at least one of: E-mail Address, Mobile Phone, or both First and Last Name before proceeding.")
+            else:
+                st.session_state.outlook_prep_step = "deduplication_setup" # Fictional state to move to next UI part
+                st.rerun() # To update UI based on new step
+
+        # Placeholder for next steps (Deduplication setup, Analysis)
+        if st.session_state.get("outlook_prep_step") == "deduplication_setup":
+            st.markdown("---")
+            st.markdown("#### 2. Configure Duplicate Detection")
+            
+            mapped_columns = st.session_state.outlook_prep_column_mapping
+            # Filter available fields for duplicate checking to those actually mapped by the user
+            available_fields_for_exact_match = [mf_key for mf_key, mf_val in TARGET_FIELDS.items() if mapped_columns.get(mf_key)]
+            # Add a conceptual "FullName" if both FirstName and LastName are mapped
+            if mapped_columns.get("FirstName") and mapped_columns.get("LastName"):
+                available_fields_for_exact_match.append("FullName (First + Last)") # Conceptual field
+
+            if not any(available_fields_for_exact_match):
+                st.warning("No fields suitable for duplicate detection have been mapped. Please map fields like Email, Phone, or Name in Step 1.")
+                st.stop()
+
+            # Initialize duplicate_check_fields in session state if not present
+            if 'outlook_prep_duplicate_check_fields' not in st.session_state:
+                st.session_state.outlook_prep_duplicate_check_fields = []
+
+            selected_exact_match_fields = st.multiselect(
+                "Select field(s) for **exact** duplicate checking:",
+                options=available_fields_for_exact_match,
+                default=[f for f in st.session_state.outlook_prep_duplicate_check_fields if f in available_fields_for_exact_match],
+                help="Contacts will be considered exact duplicates if ALL selected fields match."
+            )
+            st.session_state.outlook_prep_duplicate_check_fields = selected_exact_match_fields
+
+            # Fuzzy matching options (only if FirstName and LastName are mapped)
+            can_do_fuzzy = mapped_columns.get("FirstName") and mapped_columns.get("LastName")
+            if 'outlook_prep_enable_fuzzy_matching' not in st.session_state:
+                 st.session_state.outlook_prep_enable_fuzzy_matching = False # Default to False
+            if 'outlook_prep_fuzzy_threshold' not in st.session_state:
+                 st.session_state.outlook_prep_fuzzy_threshold = 85 # Default threshold
+
+            if can_do_fuzzy:
+                st.session_state.outlook_prep_enable_fuzzy_matching = st.checkbox(
+                    "Enable Fuzzy Name Matching (for First + Last Name)", 
+                    value=st.session_state.outlook_prep_enable_fuzzy_matching,
+                    help="Uses string similarity to find non-exact name matches. Slower on very large files."
+                )
+                if st.session_state.outlook_prep_enable_fuzzy_matching:
+                    st.session_state.outlook_prep_fuzzy_threshold = st.slider(
+                        "Fuzzy Match Similarity Threshold (%):", 
+                        min_value=50, 
+                        max_value=100, 
+                        value=st.session_state.outlook_prep_fuzzy_threshold, 
+                        help="Higher means names must be more similar to be considered a fuzzy match."
+                    )
+            else:
+                st.session_state.outlook_prep_enable_fuzzy_matching = False # Ensure it's off if names not mapped
+                st.info("Map both 'FirstName' and 'LastName' in Step 1 to enable Fuzzy Name Matching.")
+
+            if st.button("Run Analysis", type="primary", key="run_outlook_prep_analysis"):
+                if not selected_exact_match_fields and not st.session_state.outlook_prep_enable_fuzzy_matching:
+                    st.error("Please select at least one field for exact duplicate checking or enable fuzzy name matching.")
+                else:
+                    # Add debug info
+                    st.info(f"Starting analysis with {len(st.session_state.outlook_prep_uploaded_df)} records and {len(selected_exact_match_fields)} selected fields.")
+                    
+                    # Perform the actual analysis rather than just moving to the placeholder
+                    with st.spinner("Analyzing your contact data..."):
+                        try:
+                            # Add debug output
+                            st.write("Debug: Starting analysis process")
+                            
+                            # Get our data and settings
+                            df = st.session_state.outlook_prep_uploaded_df
+                            mapping = st.session_state.outlook_prep_column_mapping
+                            
+                            # Show key variables
+                            st.write(f"Debug: Mapping keys: {list(mapping.keys())}")
+                            st.write(f"Debug: DataFrame columns: {list(df.columns)}")
+                            st.write(f"Debug: Selected fields: {selected_exact_match_fields}")
+                            
+                            # Create a results structure to store analysis findings
+                            analysis_results = {
+                                "total_records": len(df),
+                                "exact_duplicates": [],
+                                "fuzzy_duplicates": [],
+                                "invalid_phones": [],
+                                "empty_required": [],  # Add this field to avoid KeyError
+                                "metrics": {
+                                    "total_contacts": len(df),
+                                    "exact_duplicate_count": 0,
+                                    "fuzzy_duplicate_count": 0,
+                                    "invalid_phone_count": 0,
+                                    "empty_required_fields_count": 0,
+                                },
+                                "error": None
+                            }
+                            
+                            # EXACT DUPLICATE CHECK
+                            if selected_exact_match_fields:
+                                st.write("Checking for exact duplicates...")
+                                # Convert Outlook field names to actual columns in the dataframe
+                                field_to_col = {}
+                                for field in selected_exact_match_fields:
+                                    if field == "FullName (First + Last)":
+                                        if mapping.get("FirstName") and mapping.get("LastName"):
+                                            # Create a temporary full name column by concatenating first and last
+                                            df["_temp_fullname"] = df[mapping["FirstName"]].fillna("") + " " + df[mapping["LastName"]].fillna("")
+                                            df["_temp_fullname"] = df["_temp_fullname"].str.strip()
+                                            field_to_col[field] = "_temp_fullname"
+                                    else:
+                                        # Map the field to its corresponding column in the dataframe
+                                        if mapping.get(field):
+                                            field_to_col[field] = mapping[field]
+                            
+                                # Only proceed if we have valid column mappings
+                                check_cols = [col for col in field_to_col.values() if col in df.columns]
+                                if check_cols:
+                                    # Find duplicates based on the selected fields
+                                    duplicate_mask = df.duplicated(subset=check_cols, keep=False)
+                                    duplicates = df[duplicate_mask].copy()
+                                    
+                                    if not duplicates.empty:
+                                        # Group by duplicate values
+                                        for _, group in duplicates.groupby(check_cols):
+                                            if len(group) > 1:  # Ensure it's actually a duplicate group
+                                                analysis_results["exact_duplicates"].append({
+                                                    "fields": [field for field, col in field_to_col.items() if col in check_cols],
+                                                    "count": len(group),
+                                                    "records": group.to_dict('records')
+                                                })
+                                        
+                                        # Update metrics
+                                        analysis_results["metrics"]["exact_duplicate_count"] = sum(len(g["records"]) for g in analysis_results["exact_duplicates"])
+
+                            # Store results in session state before trying other steps (in case they fail)
+                            st.session_state.outlook_prep_analysis_results = analysis_results
+                            
+                            # Debug info
+                            st.write(f"Found {analysis_results['metrics']['exact_duplicate_count']} exact duplicates.")
+                            
+                            # FUZZY DUPLICATE CHECK
+                            if st.session_state.outlook_prep_enable_fuzzy_matching:
+                                st.write("Checking for fuzzy name matches...")
+                                # Only proceed if both first and last name are mapped
+                                if mapping.get("FirstName") and mapping.get("LastName"):
+                                    try:
+                                        # Create a full name for comparison
+                                        df["_fullname"] = df[mapping["FirstName"]].fillna("") + " " + df[mapping["LastName"]].fillna("")
+                                        df["_fullname"] = df["_fullname"].str.strip()
+                                        
+                                        # If there are not many records, do a complete comparison
+                                        # For large datasets, we might want to optimize this with blocking
+                                        if len(df) <= 1000:  # Only do complete comparison for reasonably sized datasets
+                                            fuzzy_threshold = st.session_state.outlook_prep_fuzzy_threshold
+                                            
+                                            # Compare each name with every other name
+                                            for i, row in df.iterrows():
+                                                if not pd.isna(row["_fullname"]) and row["_fullname"].strip():
+                                                    name1 = row["_fullname"]
+                                                    matches = []
+                                                    matched_indices = []
+                                                    
+                                                    # Compare with all other names
+                                                    for j, other_row in df.iterrows():
+                                                        if i != j:  # Don't compare with self
+                                                            if not pd.isna(other_row["_fullname"]) and other_row["_fullname"].strip():
+                                                                name2 = other_row["_fullname"]
+                                                                
+                                                                # Calculate similarity
+                                                                similarity = fuzz.ratio(name1.lower(), name2.lower())
+                                                                
+                                                                # If similar enough but not exact
+                                                                if similarity >= fuzzy_threshold and similarity < 100:
+                                                                    matches.append({
+                                                                        "name": name2,
+                                                                        "similarity": similarity,
+                                                                        "index": j
+                                                                    })
+                                                                    matched_indices.append(j)
+                                                    
+                                                    # If matches found, create a fuzzy duplicate group
+                                                    if matches:
+                                                        # Add this record and all matches to the group
+                                                        group_records = [row.to_dict()]
+                                                        for idx in matched_indices:
+                                                            group_records.append(df.loc[idx].to_dict())
+                                                        
+                                                        # Add to results
+                                                        analysis_results["fuzzy_duplicates"].append({
+                                                            "original": {"name": name1, "index": i},
+                                                            "matches": matches,
+                                                            "records": group_records
+                                                        })
+                                            
+                                            # Update metrics for fuzzy duplicates
+                                            fuzzy_records_count = sum(len(g["records"]) for g in analysis_results["fuzzy_duplicates"])
+                                            analysis_results["metrics"]["fuzzy_duplicate_count"] = fuzzy_records_count
+                                            
+                                            # Debug info
+                                            st.write(f"Found {len(analysis_results['fuzzy_duplicates'])} fuzzy match groups with {fuzzy_records_count} records.")
+                                        else:
+                                            st.warning("Dataset too large for fuzzy matching. Try using a smaller sample.")
+                                    except Exception as e:
+                                        st.error(f"Error in fuzzy matching: {str(e)}")
+                                        analysis_results["error"] = f"Fuzzy matching error: {str(e)}"
+                            
+                            # Update session state with fuzzy results
+                            st.session_state.outlook_prep_analysis_results = analysis_results
+                            
+                            # PHONE VALIDATION
+                            st.write("Validating phone numbers...")
+                            phone_fields = [field for field in ["MobilePhone", "HomePhone", "BusinessPhone"] 
+                                            if mapping.get(field) and mapping[field] in df.columns]
+                            
+                            invalid_phones = []
+                            if phone_fields:
+                                for field in phone_fields:
+                                    col = mapping[field]
+                                    if col in df.columns:
+                                        # Check each phone number
+                                        for idx, row in df.iterrows():
+                                            phone = row[col]
+                                            if pd.notna(phone) and phone:  # Not empty
+                                                try:
+                                                    # Use safer way to call format_phone_strict that won't crash if import fails
+                                                    # First check if function exists in current namespace
+                                                    if 'format_phone_strict' in globals():
+                                                        formatted, status = format_phone_strict(str(phone))
+                                                        if not status.startswith("Valid"):
+                                                            invalid_phones.append({
+                                                                "field": field,
+                                                                "original_value": phone,
+                                                                "status": status,
+                                                                "record": row.to_dict()
+                                                            })
+                                                except Exception as e:
+                                                    st.error(f"Phone validation error: {str(e)}")
+                                                    analysis_results["error"] = f"Phone validation error: {str(e)}"
+                                
+                                # Update metrics
+                                analysis_results["invalid_phones"] = invalid_phones
+                                analysis_results["metrics"]["invalid_phone_count"] = len(invalid_phones)
+                            
+                            # Store results again with phone validation results
+                            st.session_state.outlook_prep_analysis_results = analysis_results
+                            
+                            # CHECK FOR EMPTY REQUIRED FIELDS
+                            st.write("Checking field completeness...")
+                            required_fields = ["FirstName", "LastName", "Email1", "MobilePhone"]
+                            empty_required = []
+                            
+                            for field in required_fields:
+                                if field in mapping and mapping[field] in df.columns:
+                                    col = mapping[field]
+                                    empty_count = df[col].isna().sum() + (df[col] == "").sum()
+                                    
+                                    if empty_count > 0:
+                                        # Calculate percentage
+                                        percentage = (empty_count / len(df)) * 100
+                                        
+                                        empty_required.append({
+                                            "field": field,
+                                            "column": col,
+                                            "count": int(empty_count),
+                                            "percentage": percentage
+                                        })
+                            
+                            # Update results
+                            analysis_results["empty_required"] = empty_required
+                            analysis_results["metrics"]["empty_required_fields_count"] = len(empty_required)
+                                
+                            # Finally update session state with complete results
+                            st.session_state.outlook_prep_analysis_results = analysis_results
+                            st.session_state.outlook_prep_step = "analysis_results"
+                            
+                            # Debug info
+                            st.success("Analysis completed successfully! Navigating to results...")
+                            
+                        except Exception as e:
+                            st.error(f"Error during analysis: {str(e)}")
+                            # Add traceback for better error detection
+                            st.code(traceback.format_exc(), language="python")
+                            # Also print to terminal for easier debugging
+                            print(f"ERROR in analysis: {str(e)}")
+                            print(traceback.format_exc())
+                            # Still update step to show results, but mark error
+                            if 'outlook_prep_analysis_results' not in st.session_state:
+                                st.session_state.outlook_prep_analysis_results = {"error": str(e)}
+                            st.session_state.outlook_prep_step = "analysis_results"
+                    
+                    # Force rerun to show results
+                    st.rerun()
+
+        if st.session_state.get("outlook_prep_step") == "analysis_results":
+            st.markdown("---")
+            st.markdown("#### 3. Analysis Results")
+            
+            # Display results if they exist
+            if st.session_state.outlook_prep_analysis_results:
+                results = st.session_state.outlook_prep_analysis_results
+                
+                # Overview metrics
+                st.markdown("##### Contact Data Overview")
+                metrics_cols = st.columns(4)
+                
+                with metrics_cols[0]:
+                    st.metric("Total Contacts", results["metrics"]["total_contacts"])
+                
+                with metrics_cols[1]:
+                    exact_dup_count = results["metrics"]["exact_duplicate_count"]
+                    pct = f"({(exact_dup_count / results['metrics']['total_contacts'] * 100):.1f}%)" if results["metrics"]["total_contacts"] > 0 else ""
+                    st.metric("Exact Duplicates", f"{exact_dup_count} {pct}")
+                
+                with metrics_cols[2]:
+                    fuzzy_dup_count = results["metrics"]["fuzzy_duplicate_count"]
+                    pct = f"({(fuzzy_dup_count / results['metrics']['total_contacts'] * 100):.1f}%)" if results["metrics"]["total_contacts"] > 0 else ""
+                    st.metric("Fuzzy Duplicates", f"{fuzzy_dup_count} {pct}")
+                
+                with metrics_cols[3]:
+                    invalid_count = results["metrics"]["invalid_phone_count"]
+                    pct = f"({(invalid_count / results['metrics']['total_contacts'] * 100):.1f}%)" if results["metrics"]["total_contacts"] > 0 else ""
+                    st.metric("Invalid Phones", f"{invalid_count} {pct}")
+                
+                # Create tabs for different result sections
+                result_tabs = st.tabs([
+                    "Exact Duplicates", 
+                    "Fuzzy Matches", 
+                    "Phone Issues",
+                    "Field Completeness"
+                ])
+                
+                # Exact Duplicates Tab
+                with result_tabs[0]:
+                    if results["exact_duplicates"]:
+                        st.markdown(f"##### Found {len(results['exact_duplicates'])} groups of exact duplicates")
+                        
+                        for i, group in enumerate(results["exact_duplicates"]):
+                            with st.expander(f"Duplicate Group #{i+1}: {group['count']} records matching on {', '.join(group['fields'])}"):
+                                if group["records"]:
+                                    st.dataframe(pd.DataFrame(group["records"]))
+                    else:
+                        st.info("No exact duplicates found based on your selected criteria.")
+                
+                # Fuzzy Matches Tab
+                with result_tabs[1]:
+                    if results["fuzzy_duplicates"]:
+                        st.markdown(f"##### Found {len(results['fuzzy_duplicates'])} groups with similar names")
+                        
+                        for i, group in enumerate(results["fuzzy_duplicates"]):
+                            matches_info = [f"{m['name']} ({m['similarity']}% similar)" for m in group["matches"]]
+                            with st.expander(f"Similar Name Group #{i+1}: '{group['original']['name']}' matches {len(matches_info)} others"):
+                                # Display original and matched names with similarity scores
+                                st.markdown("**Original Name:** " + group["original"]["name"])
+                                st.markdown("**Similar to:**")
+                                for match_info in matches_info:
+                                    st.markdown(f"- {match_info}")
+                                
+                                # Display the full records
+                                st.markdown("**Full Records:**")
+                                st.dataframe(pd.DataFrame(group["records"]))
+                    else:
+                        if st.session_state.outlook_prep_enable_fuzzy_matching:
+                            st.info("No similar names found with the current threshold setting.")
+                        else:
+                            st.info("Fuzzy name matching was not enabled.")
+                
+                # Phone Issues Tab
+                with result_tabs[2]:
+                    if results["invalid_phones"]:
+                        st.markdown(f"##### Found {len(results['invalid_phones'])} phone numbers with issues")
+                        
+                        # Convert to DataFrame for easier display
+                        phone_issues_df = pd.DataFrame([
+                            {
+                                "Field": issue["field"],
+                                "Original Value": issue["original_value"],
+                                "Status": issue["status"]
+                            }
+                            for issue in results["invalid_phones"]
+                        ])
+                        
+                        st.dataframe(phone_issues_df)
+                    else:
+                        st.info("No phone number issues detected.")
+                
+                # Field Completeness Tab
+                with result_tabs[3]:
+                    if "empty_required" in results and results["empty_required"]:
+                        st.markdown("##### Required Fields Missing Data")
+                        
+                        # Create a DataFrame for better display
+                        empty_fields_df = pd.DataFrame([
+                            {
+                                "Field": empty["field"],
+                                "Records Missing": empty["count"],
+                                "Percentage": f"{empty['percentage']:.1f}%"
+                            }
+                            for empty in results["empty_required"]
+                        ])
+                        
+                        st.dataframe(empty_fields_df)
+                        
+                        # Create a bar chart to visualize completeness
+                        if not empty_fields_df.empty:
+                            fig = px.bar(
+                                empty_fields_df,
+                                x="Field",
+                                y="Records Missing",
+                                text="Percentage",
+                                title="Required Fields Missing Data",
+                                color="Records Missing"
+                            )
+                            
+                            fig.update_layout(height=400)
+                            st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.info("All required fields have data in all records, or no required fields were defined.")
+                
+                # Download cleaned file option (placeholder for now)
+                st.markdown("---")
+                st.markdown("##### Download Options")
+                
+                download_cols = st.columns(2)
+                
+                with download_cols[0]:
+                    st.button("Download Analysis Report (CSV)", disabled=True, 
+                             help="This feature is coming soon.")
+                
+                with download_cols[1]:
+                    st.button("Download Cleaned Contacts (CSV)", disabled=True,
+                             help="This feature is coming soon.")
+            else:
+                st.info("No analysis results available. Please run the analysis first.")
+                # Add button to return to previous step if needed
+                if st.button("Return to Duplicate Detection Setup"):
+                    st.session_state.outlook_prep_step = "deduplication_setup"
+                    st.rerun()
 
 # Call the main function
 if __name__ == "__main__":

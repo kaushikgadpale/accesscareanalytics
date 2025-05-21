@@ -135,7 +135,7 @@ def create_pnl_dashboard(df):
             title='Top 10 Clients by Net Profit',
             color='Profit_Margin',
             color_continuous_scale='RdYlGn',
-            text_auto='$.2s'
+            text='Net_Profit'
         )
         
         fig.update_traces(texttemplate='${text:,.2f}', textposition='outside')

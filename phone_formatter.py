@@ -3,7 +3,12 @@ import pandas as pd
 import plotly.express as px
 
 def format_phone_strict(raw_phone):
-    """Format phone numbers in a strict format"""
+    """
+    Format phone numbers in a strict format that's compatible with WhatsApp
+    
+    WhatsApp requires format: +[country code][number without leading zeros]
+    For example: +1 555 123 4567 or +44 7911 123456
+    """
     if isinstance(raw_phone, pd.DataFrame):
         # Handle DataFrame case
         df = raw_phone.copy()
@@ -15,79 +20,147 @@ def format_phone_strict(raw_phone):
         return ("", "Missing")
     
     # Remove all non-digit characters
-    digits = re.sub(r"[^\d]", "", raw_phone)
+    digits = re.sub(r"[^\d+]", "", raw_phone)
     
-    # Basic validation
+    # If there's already a + in the number, remove all characters before and including it
+    # This ensures we only keep the digits after the international prefix
+    if "+" in digits:
+        digits = re.sub(r"^.*?\+", "", digits)
+    
+    # Basic validation - count the actual digits
     if len(digits) < 8:
         return ("", "Too Short")
     if len(digits) > 15:
         return ("", "Too Long")
     
     try:
-        # Irish numbers (+353)
-        if (digits.startswith("353") or 
-            (len(digits) == 9 and digits.startswith("08")) or
-            (len(digits) == 10 and digits.startswith("08"))):
-            if digits.startswith("353"):
-                formatted = f"+353 {digits[3:]}"
+        # Detect country code from the starting digits
+        
+        # Country code detection patterns (arranged from most to least specific)
+        country_patterns = [
+            # Format: (regex_pattern, country_code, country_name, leading_digits_to_remove)
+            # North America: +1
+            (r"^1\d{10}$", "1", "US/CA", 1),  # US/Canada with country code
+            (r"^\d{10}$", "1", "US/CA", 0),   # US/Canada without country code
+            
+            # UK: +44
+            (r"^44\d{10}$", "44", "UK", 2),         # UK with country code
+            (r"^0\d{10}$", "44", "UK", 1),          # UK with leading 0
+            (r"^7\d{9}$", "44", "UK", 0),           # UK mobile without leading 0
+            
+            # Ireland: +353
+            (r"^353\d{9}$", "353", "IE", 3),        # Ireland with country code
+            (r"^0\d{9}$", "353", "IE", 1),          # Ireland with leading 0
+            
+            # UAE: +971
+            (r"^971\d{9}$", "971", "UAE", 3),       # UAE with country code
+            (r"^0\d{9}$", "971", "UAE", 1),         # UAE with leading 0
+            (r"^5\d{8}$", "971", "UAE", 0),         # UAE mobile without leading 0
+            
+            # Philippines: +63
+            (r"^63\d{10}$", "63", "PH", 2),         # Philippines with country code
+            (r"^0\d{10}$", "63", "PH", 1),          # Philippines with leading 0
+            (r"^9\d{9}$", "63", "PH", 0),           # Philippines mobile without leading 0
+            
+            # Denmark: +45
+            (r"^45\d{8}$", "45", "DK", 2),          # Denmark with country code
+            (r"^\d{8}$", "45", "DK", 0),            # Denmark without country code
+            
+            # India: +91
+            (r"^91\d{10}$", "91", "IN", 2),         # India with country code
+            (r"^0\d{10}$", "91", "IN", 1),          # India with leading 0
+            (r"^[6789]\d{9}$", "91", "IN", 0),      # India mobile without leading 0
+            
+            # Australia: +61
+            (r"^61\d{9}$", "61", "AU", 2),          # Australia with country code
+            (r"^0\d{9}$", "61", "AU", 1),           # Australia with leading 0
+            (r"^4\d{8}$", "61", "AU", 0),           # Australia mobile without leading 0
+            
+            # Mexico: +52
+            (r"^52\d{10}$", "52", "MX", 2),         # Mexico with country code
+            (r"^0\d{10}$", "52", "MX", 1),          # Mexico with leading 0
+            
+            # Brazil: +55
+            (r"^55\d{10,11}$", "55", "BR", 2),      # Brazil with country code
+            (r"^0\d{10,11}$", "55", "BR", 1),       # Brazil with leading 0
+            
+            # Germany: +49
+            (r"^49\d{10,11}$", "49", "DE", 2),      # Germany with country code
+            (r"^0\d{10,11}$", "49", "DE", 1),       # Germany with leading 0
+            
+            # France: +33
+            (r"^33\d{9}$", "33", "FR", 2),          # France with country code
+            (r"^0\d{9}$", "33", "FR", 1),           # France with leading 0
+            
+            # Spain: +34
+            (r"^34\d{9}$", "34", "ES", 2),          # Spain with country code
+            (r"^\d{9}$", "34", "ES", 0),            # Spain without country code
+        ]
+        
+        # Try to match the digit pattern to identify the country
+        matched_country = None
+        for pattern, country_code, country_name, digits_to_remove in country_patterns:
+            if re.match(pattern, digits):
+                matched_country = (country_code, country_name, digits_to_remove)
+                break
+        
+        # Format the phone number based on the detected country
+        if matched_country:
+            country_code, country_name, digits_to_remove = matched_country
+            
+            # Remove leading digits that are already part of the country code or leading zeros
+            if digits_to_remove > 0:
+                formatted_number = digits[digits_to_remove:]
             else:
-                formatted = f"+353 {digits[1:]}"
-            return (formatted, "Valid IE")
+                formatted_number = digits
+            
+            # Format for WhatsApp - always use the + prefix followed by country code and number
+            formatted = f"+{country_code} {formatted_number}"
+            
+            # Apply country-specific formatting where appropriate
+            if country_code == "1":  # US/Canada: +1 (XXX) XXX-XXXX
+                if len(formatted_number) == 10:
+                    area_code = formatted_number[:3]
+                    prefix = formatted_number[3:6]
+                    line = formatted_number[6:]
+                    formatted = f"+1 ({area_code}) {prefix}-{line}"
+            elif country_code == "44":  # UK: +44 XXXX XXXXXX
+                if len(formatted_number) >= 10:
+                    formatted = f"+44 {formatted_number}"
+            
+            return (formatted, f"Valid {country_name}")
         
-        # UK numbers (+44)
-        if (digits.startswith("44") or 
-            (len(digits) == 11 and digits.startswith("07")) or
-            (len(digits) == 10 and digits.startswith("0"))):
-            if digits.startswith("44"):
-                formatted = f"+44 {digits[2:]}"
+        # If no specific format matches but length is valid (fallback)
+        # Try to detect country code from first digits
+        if len(digits) >= 11 and digits[:1] == "1":
+            # Likely North America
+            return (f"+1 {digits[1:]}", "Valid US/CA")
+        elif len(digits) >= 11 and digits[:2] == "44":
+            # Likely UK
+            return (f"+44 {digits[2:]}", "Valid UK")
+        elif len(digits) >= 12 and digits[:3] == "353":
+            # Likely Ireland
+            return (f"+353 {digits[3:]}", "Valid IE")
+        elif len(digits) >= 12 and digits[:3] == "971":
+            # Likely UAE
+            return (f"+971 {digits[3:]}", "Valid UAE")
+        elif len(digits) >= 11 and digits[:2] == "63":
+            # Likely Philippines
+            return (f"+63 {digits[2:]}", "Valid PH")
+        elif len(digits) >= 10 and digits[:2] == "45":
+            # Likely Denmark
+            return (f"+45 {digits[2:]}", "Valid DK")
+        elif len(digits) >= 12 and digits[:2] == "91":
+            # Likely India
+            return (f"+91 {digits[2:]}", "Valid IN")
+        else:
+            # Can't determine country - format with best guess
+            # Most international numbers have 2-3 digit country codes
+            if len(digits) >= 11:
+                # Assume first 2 digits are country code
+                return (f"+{digits[:2]} {digits[2:]}", "Unknown Format")
             else:
-                formatted = f"+44 {digits[1:]}"
-            return (formatted, "Valid UK")
-        
-        # US/Canada numbers (+1)
-        if ((digits.startswith("1") and len(digits) == 11) or 
-            len(digits) == 10):
-            area_code = digits[-10:-7]
-            prefix = digits[-7:-4]
-            line = digits[-4:]
-            formatted = f"+1 ({area_code}) {prefix}-{line}"
-            return (formatted, "Valid US/CA")
-        
-        # UAE numbers (+971)
-        if (digits.startswith("971") or 
-            (len(digits) == 9 and digits.startswith("0")) or
-            (len(digits) in [9, 10] and digits.startswith("5"))):
-            if digits.startswith("971"):
-                formatted = f"+971 {digits[3:]}"
-            elif digits.startswith("0"):
-                formatted = f"+971 {digits[1:]}"
-            else:
-                formatted = f"+971 {digits}"
-            return (formatted, "Valid UAE")
-        
-        # Philippines numbers (+63)
-        if (digits.startswith("63") or 
-            (len(digits) == 10 and digits.startswith("0")) or
-            (len(digits) == 10 and digits.startswith("9"))):
-            if digits.startswith("63"):
-                formatted = f"+63 {digits[2:]}"
-            elif digits.startswith("0"):
-                formatted = f"+63 {digits[1:]}"
-            else:
-                formatted = f"+63 {digits}"
-            return (formatted, "Valid PH")
-        
-        # Denmark numbers (+45)
-        if (digits.startswith("45") or len(digits) == 8):
-            if digits.startswith("45"):
-                formatted = f"+45 {digits[2:]}"
-            else:
-                formatted = f"+45 {digits}"
-            return (formatted, "Valid DK")
-        
-        # If no specific format matches but length is valid, return cleaned number
-        if 8 <= len(digits) <= 15:
-            return (f"+{digits}", "Unknown Format")
+                return (f"+{digits}", "Unknown Format")
             
     except Exception as e:
         return ("", f"Error: {str(e)}")
@@ -430,25 +503,39 @@ def get_phone_status(phone_number):
     if not phone_number:
         return "Missing"
     
-    if phone_number.startswith('+'):
-        if '+353' in phone_number:
-            return "Valid (Ireland)"
-        elif '+44' in phone_number:
-            return "Valid (UK)"
-        elif '+1' in phone_number:
-            return "Valid (US/Canada)"
-        elif '+971' in phone_number:
-            return "Valid (UAE)"
-        elif '+63' in phone_number:
-            return "Valid (Philippines)"
-        elif '+45' in phone_number: 
-            return "Valid (Denmark)"
-        else:
-            return "Valid (International)"
+    # Handle tuple format (output from format_phone_strict)
+    if isinstance(phone_number, tuple) and len(phone_number) > 1:
+        # Second element of tuple contains status
+        return phone_number[1]
     
-    if len(phone_number) < 10:
-        return "Too Short"
-    elif len(phone_number) > 15:
-        return "Too Long"
+    # If it's just a string, check its format
+    if isinstance(phone_number, str):
+        if phone_number.startswith('+'):
+            # Extract country code
+            match = re.match(r"^\+(\d{1,3})", phone_number)
+            if match:
+                country_code = match.group(1)
+                country_map = {
+                    "1": "Valid US/CA",    # United States/Canada
+                    "44": "Valid UK",      # United Kingdom
+                    "353": "Valid IE",     # Ireland
+                    "971": "Valid UAE",    # UAE/Dubai
+                    "45": "Valid DK",      # Denmark
+                    "63": "Valid PH",      # Philippines
+                    "91": "Valid IN",      # India
+                    "61": "Valid AU",      # Australia
+                    "52": "Valid MX",      # Mexico
+                    "55": "Valid BR",      # Brazil
+                    "49": "Valid DE",      # Germany
+                    "33": "Valid FR",      # France
+                    "34": "Valid ES",      # Spain
+                }
+                return country_map.get(country_code, "Valid International")
+        
+        # Length checks
+        if len(re.sub(r"[^\d]", "", phone_number)) < 8:
+            return "Too Short"
+        elif len(re.sub(r"[^\d]", "", phone_number)) > 15:
+            return "Too Long"
     
     return "Invalid Format"

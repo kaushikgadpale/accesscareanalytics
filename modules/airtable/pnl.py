@@ -86,7 +86,28 @@ def get_pnl_data(filters=None):
         date_fields = ['SERVICE_MONTH', 'Service_Month', 'Service Month', 'Month', 'LAST_MODIFIED', 'Last Modified']
         for field in date_fields:
             if field in df.columns:
-                df[field] = pd.to_datetime(df[field], errors='coerce')
+                # Check if the column contains lists and extract first item if needed
+                if df[field].apply(lambda x: isinstance(x, list)).any():
+                    # Handle list values - take the first item from each list
+                    df[field] = df[field].apply(
+                        lambda x: x[0] if isinstance(x, list) and len(x) > 0 else 
+                                 (x if not isinstance(x, list) else None)
+                    )
+                
+                # Add more detailed logging for debugging
+                st.write(f"Converting '{field}' to datetime. Sample values: {df[field].head(3).tolist()}")
+                
+                try:
+                    # Try to convert with a specific format first if possible
+                    df[field] = pd.to_datetime(df[field], errors='coerce', format='%Y-%m-%d')
+                except ValueError:
+                    # Fall back to the default parser
+                    df[field] = pd.to_datetime(df[field], errors='coerce')
+                
+                # Show any rows with NaT values after conversion
+                nat_count = df[field].isna().sum()
+                if nat_count > 0:
+                    st.warning(f"{nat_count} rows have invalid/missing dates in '{field}'")
         
         # Convert numeric fields - try multiple potential names
         currency_fields = [

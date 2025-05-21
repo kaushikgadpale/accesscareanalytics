@@ -22,3 +22,7 @@ httpx>=0.26.0
 
 # For .docx file handling
 python-docx>=0.8.11
+
+# For fuzzy string matching
+thefuzz>=0.20.0
+python-Levenshtein>=0.20.0 # Recommended for thefuzz performance
