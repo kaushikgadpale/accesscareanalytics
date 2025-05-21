@@ -1,3 +1,6 @@
+import pandas as pd
+import streamlit as st
+
 def apply_filters(df, filters):
     """
     Apply common filters to dataframe
