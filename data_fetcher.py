@@ -3,29 +3,120 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 from config import LOCAL_TZ
-from azure.identity import ClientSecretCredential
 import os
-from dotenv import load_dotenv
-from msgraph import GraphServiceClient
-from msgraph.generated.solutions.booking_businesses.booking_businesses_request_builder import BookingBusinessesRequestBuilder
-from msgraph.generated.solutions.booking_businesses.item.calendar_view.calendar_view_request_builder import CalendarViewRequestBuilder
-from kiota_abstractions.base_request_configuration import RequestConfiguration
+import requests
+import msal
+import time
+import json
 import asyncio
+from dotenv import load_dotenv
 
+# Try to load from .env file
 load_dotenv()
 
-async def get_graph_client():
-    """Initialize Microsoft Graph client using Azure authentication"""
+# Fallback: If environment variables are not loaded, try to load from env.txt
+tenant_id = os.getenv('TENANT_ID')
+client_id = os.getenv('CLIENT_ID')
+client_secret = os.getenv('CLIENT_SECRET')
+
+if not tenant_id or not client_id or not client_secret:
     try:
-        credential = ClientSecretCredential(
-            tenant_id=os.getenv('TENANT_ID'),
-            client_id=os.getenv('CLIENT_ID'),
-            client_secret=os.getenv('CLIENT_SECRET')
-        )
-        # Initialize the Graph client
-        return GraphServiceClient(credentials=credential)
+        # Read env.txt and parse variables
+        with open('env.txt', 'r') as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    if '=' in line:
+                        key, value = line.split('=', 1)
+                        # Set environment variable
+                        os.environ[key] = value
+        
+        # Try getting the variables again
+        tenant_id = os.getenv('TENANT_ID')
+        client_id = os.getenv('CLIENT_ID')
+        client_secret = os.getenv('CLIENT_SECRET')
+        
+        if not tenant_id or not client_id or not client_secret:
+            st.error("Failed to load all required credentials from env.txt")
     except Exception as e:
-        st.error(f"Failed to initialize Graph client: {str(e)}")
+        st.error(f"Error loading variables from env.txt: {str(e)}")
+
+# Check if environment variables are loaded
+if not tenant_id or not client_id or not client_secret:
+    st.error("Missing environment variables for Microsoft Graph authentication. Please check your .env file or env.txt.")
+
+async def get_access_token():
+    """Get access token for Microsoft Graph API"""
+    try:
+        # Get credentials
+        tenant = os.getenv('TENANT_ID')
+        client = os.getenv('CLIENT_ID')
+        secret = os.getenv('CLIENT_SECRET')
+        
+        if not tenant or not client or not secret:
+            st.error("Missing required environment variables for authentication")
+            return None
+            
+        # Use msal directly to get a token
+        app = msal.ConfidentialClientApplication(
+            client_id=client,
+            client_credential=secret,
+            authority=f"https://login.microsoftonline.com/{tenant}"
+        )
+        
+        # Get token directly 
+        result = app.acquire_token_for_client(scopes=["https://graph.microsoft.com/.default"])
+        
+        if "access_token" not in result:
+            st.error(f"Failed to get access token: {result.get('error_description', '')}")
+            return None
+            
+        return result["access_token"]
+    except Exception as e:
+        st.error(f"Failed to get access token: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        return None
+
+async def make_graph_request(endpoint, method="GET", params=None, data=None):
+    """Make a request to the Microsoft Graph API"""
+    try:
+        # Get access token
+        token = await get_access_token()
+        if not token:
+            return None
+            
+        # Set up headers
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+        
+        # Construct full URL
+        base_url = "https://graph.microsoft.com/v1.0"
+        url = f"{base_url}{endpoint}"
+        
+        # Make the request using requests library
+        response = await asyncio.to_thread(
+            lambda: requests.request(
+                method=method,
+                url=url,
+                headers=headers,
+                params=params,
+                json=data
+            )
+        )
+        
+        # Check if request was successful
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.error(f"Graph API request failed: {response.status_code} {response.text}")
+            return None
+    except Exception as e:
+        st.error(f"Error making Graph API request: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 def parse_iso_duration(duration_str):
@@ -55,59 +146,62 @@ def parse_iso_duration(duration_str):
     return minutes
 
 async def fetch_businesses():
-    """Fetch all booking businesses using Microsoft Graph SDK"""
+    """Fetch all booking businesses using Microsoft Graph REST API"""
     try:
-        graph_client = await get_graph_client()
-        if not graph_client:
-            st.warning("Failed to initialize Graph client")
-            return []
+        with st.spinner("Fetching booking businesses..."):
+            # Make a direct request to the booking businesses endpoint
+            result = await make_graph_request("/solutions/bookingBusinesses")
             
-        result = await graph_client.solutions.booking_businesses.get()
-        if not result:
-            st.warning("No businesses found in your Microsoft Bookings account")
-            return []
+            if not result:
+                st.warning("No businesses found in your Microsoft Bookings account")
+                return []
+                
+            if "value" not in result:
+                st.warning("API response does not contain 'value' attribute")
+                return []
+                
+            businesses = [
+                {"id": biz["id"], "name": biz["displayName"]} 
+                for biz in result["value"]
+            ]
             
-        businesses = [
-            {"id": biz.id, "name": biz.display_name} 
-            for biz in result.value
-        ]
-        return businesses
+            st.success(f"Successfully fetched {len(businesses)} booking businesses")
+            return businesses
     except Exception as e:
         st.error(f"Failed to fetch businesses: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return []
 
 async def fetch_business_details(business_id):
     """Fetch detailed information about a booking business"""
     try:
-        graph_client = await get_graph_client()
-        if not graph_client:
-            return None
-            
-        result = await graph_client.solutions.booking_businesses.by_booking_business_id(business_id).get()
+        # Make a direct request to the specific booking business
+        result = await make_graph_request(f"/solutions/bookingBusinesses/{business_id}")
+        
         if not result:
             return None
             
         return {
-            "id": getattr(result, 'id', ''),
-            "name": getattr(result, 'display_name', ''),
-            "business_type": getattr(result, 'business_type', ''),
-            "default_currency_iso": getattr(result, 'default_currency_iso', ''),
-            "email": getattr(result, 'email', ''),
-            "phone": getattr(result, 'phone', ''),
-            "website_url": getattr(result, 'website_url', ''),
+            "id": result.get('id', ''),
+            "name": result.get('displayName', ''),
+            "business_type": result.get('businessType', ''),
+            "default_currency_iso": result.get('defaultCurrencyIso', ''),
+            "email": result.get('email', ''),
+            "phone": result.get('phone', ''),
+            "website_url": result.get('websiteUrl', ''),
             "scheduling_policy": {
-                "allow_staff_selection": result.scheduling_policy.allow_staff_selection if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'allow_staff_selection') else False,
-                "time_slot_interval": result.scheduling_policy.time_slot_interval if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'time_slot_interval') else 30,
-                "minimum_lead_time": result.scheduling_policy.minimum_lead_time if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'minimum_lead_time') else 0,
-                "maximum_advance": result.scheduling_policy.maximum_advance if hasattr(result, 'scheduling_policy') and hasattr(result.scheduling_policy, 'maximum_advance') else 30
+                "allow_staff_selection": result.get('schedulingPolicy', {}).get('allowStaffSelection', False),
+                "time_slot_interval": result.get('schedulingPolicy', {}).get('timeSlotInterval', 30),
+                "minimum_lead_time": result.get('schedulingPolicy', {}).get('minimumLeadTime', 0),
+                "maximum_advance": result.get('schedulingPolicy', {}).get('maximumAdvance', 30)
             },
-            "business_hours": result.business_hours if hasattr(result, 'business_hours') else [],
-            "services": result.services if hasattr(result, 'services') else [],
-            "staff_members": result.staff_members if hasattr(result, 'staff_members') else []
+            "business_hours": result.get('businessHours', []),
+            "services": result.get('services', []),
+            "staff_members": result.get('staffMembers', [])
         }
     except Exception as e:
         # Create a default minimal business details object instead of failing completely
-        st.warning(f"Error fetching business details (ID: {business_id}): {str(e)}")
         return {
             "id": business_id,
             "name": "",
@@ -128,7 +222,7 @@ async def fetch_business_details(business_id):
         }
 
 async def fetch_appointments(businesses, start_date, end_date, max_results):
-    """Fetch appointments using Microsoft Graph SDK"""
+    """Fetch appointments using Microsoft Graph API"""
     appointments = []
     progress_bar = st.progress(0)
     
@@ -151,109 +245,119 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
     if not businesses:
         businesses = await fetch_businesses()
     
-    graph_client = await get_graph_client()
-    if not graph_client:
-        st.error("Failed to initialize Graph client")
-        return []
+    # Ensure businesses is a list
+    if not isinstance(businesses, list):
+        businesses = [businesses]
 
     for idx, business in enumerate(businesses):
         try:
             # Get business ID and name
-            if isinstance(business, dict):
+            if isinstance(business, dict) and "id" in business and "name" in business:
                 business_id = business["id"]
                 business_name = business["name"]
-            else:
-                # If it's just a string (business name), fetch the ID
+            elif isinstance(business, str):
+                # If it's just a string ID, fetch the business details
                 all_businesses = await fetch_businesses()
-                business_info = next((b for b in all_businesses if b["name"] == business), None)
-                if not business_info:
-                    st.warning(f"Could not find business ID for {business}")
+                
+                # Try to find by ID first
+                try:
+                    business_info = next((b for b in all_businesses if b["id"] == business), None)
+                    if not business_info:
+                        # Try to find by name
+                        business_info = next((b for b in all_businesses if b["name"] == business), None)
+                    
+                    if not business_info:
+                        continue
+                        
+                    business_id = business_info["id"]
+                    business_name = business_info["name"]
+                except Exception as lookup_err:
+                    st.error(f"Error looking up business details: {str(lookup_err)}")
                     continue
-                business_id = business_info["id"]
-                business_name = business
+            else:
+                continue
             
             # Fetch business details
             business_details = await fetch_business_details(business_id)
             
-            # Use calendarView with SDK
-            query_params = CalendarViewRequestBuilder.CalendarViewRequestBuilderGetQueryParameters(
-                start=start_str,
-                end=end_str,
-                top=max_results
-            )
+            # Build the calendar view URL with query parameters
+            endpoint = f"/solutions/bookingBusinesses/{business_id}/calendarView"
+            params = {
+                "start": start_str,
+                "end": end_str,
+                "$top": max_results
+            }
             
-            request_configuration = RequestConfiguration(
-                query_parameters=query_params
-            )
-
-            result = await graph_client.solutions.booking_businesses.by_booking_business_id(business_id).calendar_view.get(
-                request_configuration=request_configuration
-            )
+            # Make the request
+            result = await make_graph_request(endpoint, params=params)
             
-            if not result:
-                st.write(f"No appointments found for {business_name}")
+            if not result or "value" not in result:
                 continue
                 
-            appointment_count = len(result.value)
-            st.write(f"Processing {appointment_count} appointments for {business_name}")
+            appointments_data = result["value"]
+            appointment_count = len(appointments_data)
             
             # Create a progress bar for this business's appointments
             appt_progress = st.progress(0)
             
-            for appt_idx, appt in enumerate(result.value):
+            for appt_idx, appt in enumerate(appointments_data):
                 try:
                     # Update progress for this business's appointments
                     appt_progress.progress((appt_idx + 1) / appointment_count)
                     
                     # Get customer information
                     customer_info = {
-                        "phone": getattr(appt, 'customer_phone', ''),
+                        "phone": appt.get('customerPhone', ''),
                         "location": None,
-                        "timezone": getattr(appt, 'customer_time_zone', ''),
-                        "notes": getattr(appt, 'customer_notes', ''),
-                        "email": getattr(appt, 'customer_email_address', '')
+                        "timezone": appt.get('customerTimeZone', ''),
+                        "notes": appt.get('customerNotes', ''),
+                        "email": appt.get('customerEmailAddress', '')
                     }
                     
                     # Process customer form answers
                     form_answers = {}
-                    if appt.customers and len(appt.customers) > 0:
-                        customer = appt.customers[0]
-                        if hasattr(customer, 'custom_question_answers'):
-                            for answer in customer.custom_question_answers:
-                                question = getattr(answer, 'question', '')
-                                ans = getattr(answer, 'answer', '')
-                                form_answers[question] = ans
+                    customers = appt.get('customers', [])
+                    if customers and len(customers) > 0:
+                        customer = customers[0]
+                        custom_answers = customer.get('customQuestionAnswers', [])
+                        for answer in custom_answers:
+                            question = answer.get('question', '')
+                            ans = answer.get('answer', '')
+                            form_answers[question] = ans
                     
                     # Get service details
                     service_info = {
-                        "id": getattr(appt, 'service_id', ''),
-                        "name": getattr(appt, 'service_name', ''),
+                        "id": appt.get('serviceId', ''),
+                        "name": appt.get('serviceName', ''),
                         "location": None,
-                        "notes": getattr(appt, 'service_notes', ''),
-                        "price": float(getattr(appt, 'price', 0)),
-                        "price_type": str(getattr(appt, 'price_type', 'notSet'))
+                        "notes": appt.get('serviceNotes', ''),
+                        "price": float(appt.get('price', 0)),
+                        "price_type": str(appt.get('priceType', 'notSet'))
                     }
                     
                     # Get service location
-                    if hasattr(appt, 'service_location'):
-                        service_location = appt.service_location
+                    service_location = appt.get('serviceLocation', {})
+                    if service_location:
                         service_info["location"] = {
-                            "name": getattr(service_location, 'display_name', ''),
-                            "address": getattr(service_location, 'address', None)
+                            "name": service_location.get('displayName', ''),
+                            "address": service_location.get('address', None)
                         }
                     
                     # Get appointment metadata
                     start_dt = None
-                    if hasattr(appt, 'start_date_time') and appt.start_date_time:
+                    if 'startDateTime' in appt and appt['startDateTime']:
                         try:
-                            date_time_str = getattr(appt.start_date_time, 'date_time', '')
+                            date_time_str = appt['startDateTime'].get('dateTime', '')
                             if date_time_str:
                                 start_dt = datetime.fromisoformat(date_time_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
-                        except Exception as e:
-                            st.warning(f"Error parsing start date time: {str(e)}")
+                        except Exception:
                             # Use a fallback date if possible
-                            if hasattr(appt, 'created_date_time') and appt.created_date_time:
-                                start_dt = appt.created_date_time.astimezone(LOCAL_TZ)
+                            if 'createdDateTime' in appt and appt['createdDateTime']:
+                                created_dt_str = appt['createdDateTime']
+                                try:
+                                    start_dt = datetime.fromisoformat(created_dt_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                                except:
+                                    start_dt = datetime.now(LOCAL_TZ)
                             else:
                                 start_dt = datetime.now(LOCAL_TZ)
                     else:
@@ -261,13 +365,12 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         start_dt = datetime.now(LOCAL_TZ)
                     
                     end_dt = None
-                    if hasattr(appt, 'end_date_time') and appt.end_date_time:
+                    if 'endDateTime' in appt and appt['endDateTime']:
                         try:
-                            date_time_str = getattr(appt.end_date_time, 'date_time', '')
+                            date_time_str = appt['endDateTime'].get('dateTime', '')
                             if date_time_str:
                                 end_dt = datetime.fromisoformat(date_time_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
-                        except Exception as e:
-                            st.warning(f"Error parsing end date time: {str(e)}")
+                        except Exception:
                             # Calculate an estimated end time (add 30 minutes to start)
                             if start_dt:
                                 end_dt = start_dt + timedelta(minutes=30)
@@ -276,39 +379,38 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         end_dt = start_dt + timedelta(minutes=30)
                     
                     created_dt = None
-                    if hasattr(appt, 'created_date_time'):
+                    if 'createdDateTime' in appt:
                         try:
-                            created_dt = appt.created_date_time.astimezone(LOCAL_TZ)
-                        except Exception as e:
-                            st.warning(f"Error parsing created date time: {str(e)}")
+                            created_dt_str = appt['createdDateTime']
+                            created_dt = datetime.fromisoformat(created_dt_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                        except Exception:
                             created_dt = datetime.now(LOCAL_TZ)
                     
                     last_updated_dt = None
-                    if hasattr(appt, 'last_updated_date_time'):
+                    if 'lastUpdatedDateTime' in appt:
                         try:
-                            last_updated_dt = appt.last_updated_date_time.astimezone(LOCAL_TZ)
-                        except Exception as e:
-                            st.warning(f"Error parsing last updated date time: {str(e)}")
+                            updated_dt_str = appt['lastUpdatedDateTime']
+                            last_updated_dt = datetime.fromisoformat(updated_dt_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
+                        except Exception:
                             # Use created date as fallback for last updated
                             last_updated_dt = created_dt if created_dt else datetime.now(LOCAL_TZ)
                     
                     # Get cancellation details
                     cancellation_info = None
-                    if hasattr(appt, 'cancellation_date_time') and appt.cancellation_date_time:
+                    if 'cancellationDateTime' in appt and appt['cancellationDateTime']:
                         try:
-                            date_time_str = getattr(appt.cancellation_date_time, 'date_time', '')
+                            date_time_str = appt['cancellationDateTime'].get('dateTime', '')
                             if date_time_str:
                                 cancellation_datetime = datetime.fromisoformat(date_time_str.replace('Z', '+00:00')).astimezone(LOCAL_TZ)
                                 cancellation_info = {
                                     "datetime": cancellation_datetime,
-                                    "reason": getattr(appt, 'cancellation_reason', ''),
-                                    "reason_text": getattr(appt, 'cancellation_reason_text', ''),
-                                    "notification_sent": getattr(appt, 'cancellation_notification_sent', False)
+                                    "reason": appt.get('cancellationReason', ''),
+                                    "reason_text": appt.get('cancellationReasonText', ''),
+                                    "notification_sent": appt.get('cancellationNotificationSent', False)
                                 }
-                        except Exception as e:
-                            st.warning(f"Error parsing cancellation date time: {str(e)}")
+                        except Exception:
                             # Use a default cancellation info if status shows cancelled
-                            if getattr(appt, 'status', '').lower() == 'cancelled':
+                            if appt.get('status', '').lower() == 'cancelled':
                                 cancellation_info = {
                                     "datetime": last_updated_dt or datetime.now(LOCAL_TZ),
                                     "reason": "Unknown",
@@ -322,13 +424,11 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         duration_minutes = (end_dt - start_dt).total_seconds() / 60
                     
                     # Get staff members
-                    staff_members = []
-                    if hasattr(appt, 'staff_member_ids'):
-                        staff_members = appt.staff_member_ids
+                    staff_members = appt.get('staffMemberIds', [])
                     
                     appointment_data = {
                         "Business": business_name,
-                        "Customer": getattr(appt, 'customer_name', ''),
+                        "Customer": appt.get('customerName', ''),
                         "Email": customer_info["email"],
                         "Phone": customer_info["phone"],
                         "Customer Location": str(customer_info["location"]) if customer_info["location"] else "",
@@ -346,22 +446,22 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         "Last Updated": last_updated_dt,
                         "Duration (min)": duration_minutes,
                         "Status": get_appointment_status(appt),
-                        "Notes": getattr(appt, 'customer_notes', ''),
-                        "ID": getattr(appt, 'id', ''),
+                        "Notes": appt.get('customerNotes', ''),
+                        "ID": appt.get('id', ''),
                         "Source": "Booking",
-                        "Is Online": getattr(appt, 'is_location_online', False),
-                        "Join URL": getattr(appt, 'join_web_url', ''),
-                        "SMS Enabled": getattr(appt, 'sms_notifications_enabled', False),
+                        "Is Online": appt.get('isLocationOnline', False),
+                        "Join URL": appt.get('joinWebUrl', ''),
+                        "SMS Enabled": appt.get('smsNotificationsEnabled', False),
                         "Staff Members": ", ".join(staff_members) if staff_members else '',
-                        "Additional Info": getattr(appt, 'additional_information', ''),
-                        "Appointment Label": getattr(appt, 'appointment_label', ''),
-                        "Self Service ID": getattr(appt, 'self_service_appointment_id', ''),
-                        "Customer Can Manage": getattr(appt, 'is_customer_allowed_to_manage_booking', False),
-                        "Opt Out of Email": getattr(appt, 'opt_out_of_customer_email', False),
-                        "Pre Buffer (min)": getattr(appt, 'pre_buffer', timedelta(0)).total_seconds() / 60,
-                        "Post Buffer (min)": getattr(appt, 'post_buffer', timedelta(0)).total_seconds() / 60,
-                        "Filled Attendees": getattr(appt, 'filled_attendees_count', 0),
-                        "Max Attendees": getattr(appt, 'maximum_attendees_count', 0),
+                        "Additional Info": appt.get('additionalInformation', ''),
+                        "Appointment Label": appt.get('appointmentLabel', ''),
+                        "Self Service ID": appt.get('selfServiceAppointmentId', ''),
+                        "Customer Can Manage": appt.get('isCustomerAllowedToManageBooking', False),
+                        "Opt Out of Email": appt.get('optOutOfCustomerEmail', False),
+                        "Pre Buffer (min)": parse_buffer_duration(appt.get('preBuffer', '')),
+                        "Post Buffer (min)": parse_buffer_duration(appt.get('postBuffer', '')),
+                        "Filled Attendees": appt.get('filledAttendeesCount', 0),
+                        "Max Attendees": appt.get('maximumAttendeesCount', 0),
                         "Cancellation DateTime": cancellation_info["datetime"] if cancellation_info else None,
                         "Cancellation Reason": cancellation_info["reason"] if cancellation_info else "",
                         "Cancellation Details": cancellation_info["reason_text"] if cancellation_info else "",
@@ -377,24 +477,39 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                         appointment_data[f"Form: {question}"] = answer
                     
                     appointments.append(appointment_data)
-                except (KeyError, ValueError) as e:
-                    st.warning(f"Skipping malformed appointment: {str(e)}")
+                except (KeyError, ValueError):
                     continue
             
             # Clear the appointment progress bar
             appt_progress.empty()        
             progress_bar.progress((idx + 1) / len(businesses))
-            st.write(f"Completed processing {business_name}")
         except Exception as e:
-            st.error(f"Error fetching appointments for {business_name}: {str(e)}")
+            st.error(f"Error fetching appointments for business: {str(e)}")
     
     progress_bar.empty()
     return appointments
 
+def parse_buffer_duration(duration_str):
+    """Parse buffer duration (could be in ISO 8601 format or in minutes)"""
+    if not duration_str:
+        return 0
+    
+    # If it's already a number, return it
+    if isinstance(duration_str, (int, float)):
+        return duration_str
+        
+    # If it's an ISO 8601 duration, parse it
+    if isinstance(duration_str, str) and duration_str.startswith('P'):
+        return parse_iso_duration(duration_str)
+        
+    # Default to 0
+    return 0
+
 def get_appointment_status(appt):
     """Determine appointment status"""
-    if getattr(appt, 'status', '') == 'cancelled':
+    status = appt.get('status', '').lower()
+    if status == 'cancelled':
         return "Cancelled"
-    if getattr(appt, 'completed_date_time', None):
+    if 'completedDateTime' in appt and appt['completedDateTime']:
         return "Completed"
     return "Scheduled"

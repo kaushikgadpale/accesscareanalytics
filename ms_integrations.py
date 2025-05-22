@@ -5,11 +5,8 @@ import pytz
 from config import LOCAL_TZ
 import asyncio
 import plotly.express as px
-from msgraph import GraphServiceClient
-from msgraph.generated.users.item.calendar.events.events_request_builder import EventsRequestBuilder
-from kiota_abstractions.base_request_configuration import RequestConfiguration
 from auth import get_auth_headers
-from data_fetcher import fetch_appointments, fetch_businesses
+from data_fetcher import fetch_appointments, fetch_businesses, get_access_token, make_graph_request
 import os
 
 # Get mailboxes from environment variable
@@ -17,8 +14,9 @@ BOOKINGS_MAILBOXES = os.getenv("BOOKINGS_MAILBOXES", "").split(",")
 
 async def get_graph_client():
     """Initialize Microsoft Graph client using Azure authentication"""
-    from data_fetcher import get_graph_client as fetch_graph_client
-    return await fetch_graph_client()
+    # This is now a legacy function for compatibility
+    # Return None and use direct API calls instead
+    return None
 
 async def fetch_businesses_for_appointments():
     """
@@ -57,14 +55,11 @@ async def fetch_businesses_for_appointments():
 async def fetch_bookings_data(start_date, end_date, max_results=500, selected_businesses=None):
     """Fetch bookings data for the specified date range"""
     try:
-        st.info("Fetching bookings data...")
-        
         # Use provided selected businesses if available
         businesses = selected_businesses
         
         # Handle None or empty list case
         if businesses is None or (isinstance(businesses, list) and len(businesses) == 0):
-            st.info("No businesses selected, fetching all available businesses")
             businesses = await fetch_businesses()
             if not businesses:
                 st.warning("No businesses found in your Microsoft Bookings account")
@@ -76,45 +71,44 @@ async def fetch_bookings_data(start_date, end_date, max_results=500, selected_bu
             
         # If businesses are just IDs (strings), convert them to proper format for fetch_appointments
         processed_businesses = []
-        if businesses and isinstance(businesses[0], str):
-            # These are likely just IDs, fetch the full business information
-            st.info("Converting business IDs to full business objects")
-            all_business_details = await fetch_businesses()
+        try:
+            if businesses and isinstance(businesses[0], str):
+                # These are likely just IDs, fetch the full business information
+                all_business_details = await fetch_businesses()
+                
+                if not all_business_details:
+                    st.warning("Failed to fetch business details")
+                    return []
+                    
+                # Match IDs with business details
+                for business_id in businesses:
+                    business_info = next((b for b in all_business_details if b["id"] == business_id), None)
+                    if business_info:
+                        processed_businesses.append(business_info)
+                    else:
+                        st.warning(f"Could not find details for business ID: {business_id}")
+                
+                if processed_businesses:
+                    businesses = processed_businesses
+                else:
+                    st.warning("Could not find details for any of the selected businesses")
+                    return []
+        except Exception as e:
+            st.error(f"Error processing business IDs: {str(e)}")
+            import traceback
+            st.error(f"Traceback: {traceback.format_exc()}")
+            # Continue with original businesses list
             
-            if not all_business_details:
-                st.warning("Failed to fetch business details")
+        with st.spinner(f"Fetching appointments from {len(businesses)} booking pages..."):
+            # Fetch appointments for each business
+            appointments = await fetch_appointments(businesses, start_date, end_date, max_results)
+            
+            if not appointments:
+                st.warning("No appointments found for the selected date range")
                 return []
                 
-            # Match IDs with business details
-            for business_id in businesses:
-                business_info = next((b for b in all_business_details if b["id"] == business_id), None)
-                if business_info:
-                    processed_businesses.append(business_info)
-                else:
-                    st.warning(f"Could not find details for business ID: {business_id}")
-            
-            if processed_businesses:
-                businesses = processed_businesses
-            else:
-                st.warning("Could not find details for any of the selected businesses")
-                return []
-        
-        st.info(f"Found {len(businesses)} booking pages. Fetching appointments for each page...")
-        
-        # Display the business pages we're fetching from
-        business_names = [b["name"] for b in businesses if isinstance(b, dict) and "name" in b]
-        if business_names:
-            st.write("Fetching from booking pages:", ", ".join(business_names))
-        
-        # Fetch appointments for each business
-        appointments = await fetch_appointments(businesses, start_date, end_date, max_results)
-        
-        if not appointments:
-            st.warning("No appointments found for the selected date range")
-            return []
-            
-        st.success(f"Successfully fetched {len(appointments)} appointments")
-        return appointments
+            st.success(f"Successfully fetched {len(appointments)} appointments")
+            return appointments
         
     except Exception as e:
         st.error(f"Failed to fetch bookings data: {str(e)}")
@@ -125,26 +119,19 @@ async def fetch_bookings_data(start_date, end_date, max_results=500, selected_bu
 async def inspect_calendar_api():
     """Inspect the Microsoft Graph calendar API to determine parameter names"""
     try:
-        graph_client = await get_graph_client()
-        if not graph_client:
-            return None, "Failed to initialize Graph client"
-        
-        # Get the events endpoint to check methods and parameters
-        events_endpoint = graph_client.users.by_user_id("me").calendar.events
+        # Use direct API call instead of graph client
+        result = await make_graph_request("/me/calendar")
+        if not result:
+            return None, "Failed to make direct API call to Graph API"
         
         # Return the events endpoint for inspection
-        return events_endpoint, None
+        return result, None
     except Exception as e:
         return None, f"Error inspecting calendar API: {str(e)}"
 
-async def fetch_calendar_events(start_date, end_date, max_results=1000, user_id="me"):
+async def fetch_calendar_events(start_date, end_date, max_results=1000, user_id="info-usa@accesscare.health"):
     """Fetch calendar events for a user in the specified date range"""
     try:
-        graph_client = await get_graph_client()
-        if not graph_client:
-            st.error("Failed to initialize Graph client")
-            return []
-        
         # Format dates for API - ensure we use UTC
         start_datetime = datetime.combine(start_date, datetime.min.time()).astimezone(LOCAL_TZ).astimezone(pytz.UTC)
         end_datetime = datetime.combine(end_date, datetime.max.time()).astimezone(LOCAL_TZ).astimezone(pytz.UTC)
@@ -153,249 +140,238 @@ async def fetch_calendar_events(start_date, end_date, max_results=1000, user_id=
         start_str = start_datetime.isoformat().replace('+00:00', 'Z')
         end_str = end_datetime.isoformat().replace('+00:00', 'Z')
         
-        st.info("Fetching calendars and events...")
-        
-        # First get all available calendars from the user
-        # This follows the Microsoft Graph API documentation at:
-        # https://learn.microsoft.com/en-us/graph/api/user-list-calendars
-        try:
-            # Get all calendars for the user
-            calendars = await graph_client.me.calendars.get()
-            
-            if not calendars or not hasattr(calendars, "value") or not calendars.value:
-                st.warning("No calendars found for the user. Using default calendar.")
-                # If no calendars found, try with default calendar
-                return await fetch_default_calendar_events(graph_client, start_str, end_str, max_results)
-            
-            st.success(f"Found {len(calendars.value)} calendars")
-            
-            # Show available calendars
-            calendar_names = [calendar.name for calendar in calendars.value if hasattr(calendar, "name")]
-            st.write("Calendars found:", ", ".join(calendar_names))
-            
-            # Fetch events from all calendars
-            all_events = []
-            
-            # Create a progress bar for fetching events
-            progress_bar = st.progress(0)
-            calendar_count = len(calendars.value)
-            
-            for i, calendar in enumerate(calendars.value):
-                if not hasattr(calendar, "id"):
-                    continue
-                    
-                calendar_id = calendar.id
-                calendar_name = calendar.name if hasattr(calendar, "name") else f"Calendar {calendar_id}"
+        with st.spinner(f"Fetching calendar events for {user_id}..."):
+            # Try the specified user's calendars first
+            try:
+                # Get all calendars for the specified user
+                calendars_result = await make_graph_request(f"/users/{user_id}/calendars")
                 
-                progress_text = f"Fetching events from calendar: {calendar_name} ({i+1}/{calendar_count})"
-                progress_bar.progress((i / calendar_count), text=progress_text)
+                if not calendars_result or "value" not in calendars_result or not calendars_result["value"]:
+                    # If no calendars found, try with default calendar
+                    return await fetch_default_calendar_events(None, start_str, end_str, max_results, user_id)
                 
-                # Get events from this calendar using the time filter and pagination
-                try:
-                    # Use the documented Filter query parameter to filter by time
-                    events_filter = f"start/dateTime ge '{start_str}' and end/dateTime le '{end_str}'"
-                    
-                    # Build the request with filter
-                    events_request = graph_client.me.calendars.by_calendar_id(calendar_id).events
-                    
-                    # Create request configuration with filter
-                    request_config = RequestConfiguration()
-                    request_config.query_parameters = {
-                        "$filter": events_filter,
-                        "$top": min(1000, max_results),  # Request maximum allowed in a single call
-                        "$orderby": "start/dateTime"
-                    }
-                    
-                    # Execute the request with filter
-                    calendar_events = await events_request.get(request_configuration=request_config)
-                    events_fetched = []
-                    
-                    if calendar_events and hasattr(calendar_events, "value"):
-                        # Add calendar name to each event for tracking
-                        for event in calendar_events.value:
-                            setattr(event, "calendar_name", calendar_name)
+                calendars = calendars_result["value"]
+                
+                # Fetch events from all calendars
+                all_events = []
+                
+                # Create a progress bar for fetching events
+                progress_bar = st.progress(0)
+                calendar_count = len(calendars)
+                
+                for i, calendar in enumerate(calendars):
+                    if "id" not in calendar:
+                        continue
                         
-                        events_fetched.extend(calendar_events.value)
+                    calendar_id = calendar["id"]
+                    calendar_name = calendar["name"] if "name" in calendar else f"Calendar {calendar_id}"
+                    
+                    # Update progress bar
+                    progress_bar.progress((i) / calendar_count)
+                    
+                    # Get events from this calendar
+                    try:
+                        # Get events from this calendar with direct API call
+                        # Build the calendar events endpoint
+                        params = {
+                            "startDateTime": start_str,
+                            "endDateTime": end_str,
+                            "$top": max_results
+                        }
                         
-                        # Handle pagination - check if there are more pages
-                        next_link = getattr(calendar_events, "odata_next_link", None)
+                        calendar_events = await make_graph_request(f"/users/{user_id}/calendars/{calendar_id}/calendarView", params=params)
                         
-                        # Fetch additional pages if they exist and if we haven't hit max_results
-                        while next_link and len(events_fetched) < max_results:
-                            # Create a new request with the nextLink
-                            next_request = graph_client.me.calendars.by_calendar_id(calendar_id).events.with_url(next_link)
-                            next_events = await next_request.get()
-                            
-                            if next_events and hasattr(next_events, "value"):
+                        if calendar_events and "value" in calendar_events:
+                            # Process events into standardized format
+                            for event in calendar_events["value"]:
                                 # Add calendar name to each event
-                                for event in next_events.value:
-                                    setattr(event, "calendar_name", calendar_name)
-                                
-                                events_fetched.extend(next_events.value)
-                                next_link = getattr(next_events, "odata_next_link", None)
-                            else:
-                                break
-                                
-                            # Check if we've reached max_results
-                            if len(events_fetched) >= max_results:
-                                st.warning(f"Reached maximum event limit ({max_results}) for calendar {calendar_name}")
-                                break
-                        
-                        # Update progress
-                        progress_text = f"Found {len(events_fetched)} events in calendar: {calendar_name}"
-                        progress_bar.progress((i / calendar_count), text=progress_text)
-                        
-                        # Add all events from this calendar to the overall collection
-                        all_events.extend(events_fetched)
-                        st.success(f"Found {len(events_fetched)} events in calendar {calendar_name}")
-                    else:
-                        st.info(f"No events found in calendar {calendar_name} for the specified date range")
-                        
-                except Exception as cal_err:
-                    st.warning(f"Error fetching events from calendar {calendar_name}: {str(cal_err)}")
-                    continue
-            
-            # Complete the progress bar
-            progress_bar.progress(1.0, text="Completed fetching all calendar events")
-            
-            if all_events:
-                st.success(f"Successfully fetched a total of {len(all_events)} events from all calendars")
-                return process_calendar_events(all_events)
-            else:
-                st.warning("No events found across all calendars in the specified date range")
-                return []
+                                event["calendarName"] = calendar_name
+                                all_events.append(event)
+                    except Exception as cal_err:
+                        continue
                 
-        except Exception as cal_list_err:
-            st.warning(f"Error listing calendars: {str(cal_list_err)}")
-            # Fallback to default calendar
-            return await fetch_default_calendar_events(graph_client, start_str, end_str, max_results)
+                # Clear progress bar
+                progress_bar.empty()
+                
+                # Process all events
+                if all_events:
+                    return process_calendar_events(all_events)
+                else:
+                    st.warning("No events found in any calendar")
+                    return []
+                    
+            except Exception as cal_list_err:
+                # Fall back to default calendar
+                return await fetch_default_calendar_events(None, start_str, end_str, max_results, user_id)
         
-        # If all approaches fail
-        st.warning("No calendar events found for the selected date range")
-        return []
     except Exception as e:
         st.error(f"Failed to fetch calendar events: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return []
 
-async def fetch_default_calendar_events(graph_client, start_str, end_str, max_results=1000):
-    """Fetch events from the default calendar"""
+async def fetch_default_calendar_events(graph_client, start_str, end_str, max_results=1000, user_id="info-usa@accesscare.health"):
+    """Fetch events from the default calendar (fallback method)"""
     try:
-        st.info("Attempting to fetch events from the default calendar...")
-        
-        # Use the documented Filter query parameter to filter by time
-        events_filter = f"start/dateTime ge '{start_str}' and end/dateTime le '{end_str}'"
-        
-        # Build the request with filter
-        events_request = graph_client.me.calendar.events
-        
-        # Create request configuration with filter
-        request_config = RequestConfiguration()
-        request_config.query_parameters = {
-            "$filter": events_filter, 
-            "$top": min(1000, max_results),
-            "$orderby": "start/dateTime"
-        }
-        
-        # Execute the request with filter
-        events = await events_request.get(request_configuration=request_config)
-        events_fetched = []
-        
-        if events and hasattr(events, "value"):
-            # Add default calendar name to each event
-            for event in events.value:
-                setattr(event, "calendar_name", "Default Calendar")
+        with st.spinner(f"Fetching events from default calendar for {user_id}..."):
+            # Create query parameters for direct API call
+            params = {
+                "startDateTime": start_str,
+                "endDateTime": end_str,
+                "$top": max_results
+            }
+            
+            # Make direct API call to get events - use the specific user instead of "me"
+            events_result = await make_graph_request(f"/users/{user_id}/calendar/calendarView", params=params)
+            
+            if not events_result or "value" not in events_result:
+                # Try "me" as a last resort
+                events_result = await make_graph_request("/me/calendar/calendarView", params=params)
                 
-            events_fetched.extend(events.value)
+                if not events_result or "value" not in events_result:
+                    st.warning("No events found in default calendar")
+                    return []
             
-            # Handle pagination - check if there are more pages
-            next_link = getattr(events, "odata_next_link", None)
+            events = events_result["value"]
             
-            # Create a progress bar for pagination
-            if next_link:
-                progress_bar = st.progress(0)
-                progress_bar.progress(len(events_fetched) / max_results, text=f"Fetched {len(events_fetched)} events so far...")
-            
-            # Fetch additional pages if they exist and if we haven't hit max_results
-            while next_link and len(events_fetched) < max_results:
-                # Create a new request with the nextLink
-                next_request = graph_client.me.calendar.events.with_url(next_link)
-                next_events = await next_request.get()
-                
-                if next_events and hasattr(next_events, "value"):
-                    # Add calendar name to each event
-                    for event in next_events.value:
-                        setattr(event, "calendar_name", "Default Calendar")
-                    
-                    events_fetched.extend(next_events.value)
-                    next_link = getattr(next_events, "odata_next_link", None)
-                    
-                    # Update progress
-                    if len(events_fetched) < max_results:
-                        progress_value = min(1.0, len(events_fetched) / max_results)
-                        progress_bar.progress(progress_value, text=f"Fetched {len(events_fetched)} events so far...")
-                else:
-                    break
-                    
-                # Check if we've reached max_results
-                if len(events_fetched) >= max_results:
-                    st.warning(f"Reached maximum event limit ({max_results}) for default calendar")
-                    break
-            
-            # Complete the progress bar if it exists
-            if 'progress_bar' in locals():
-                progress_bar.progress(1.0, text="Completed fetching all calendar events")
-                
-            st.success(f"Successfully fetched {len(events_fetched)} events from default calendar")
-            return process_calendar_events(events_fetched)
-        else:
-            st.warning("No events found in default calendar for the specified date range")
-            return []
-            
+            # Process events into standardized format
+            return process_calendar_events(events)
+        
     except Exception as e:
-        st.error(f"Error fetching events from default calendar: {str(e)}")
+        st.error(f"Failed to fetch events from default calendar: {str(e)}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
         return []
 
 def process_calendar_events(events):
-    """Process calendar events returned from the API"""
+    """Process calendar events into a standardized format"""
     processed_events = []
+    error_count = 0
+    
     for event in events:
         try:
-            # Process each event
-            event_data = {
-                "Subject": getattr(event, "subject", ""),
-                "Start Time": datetime.fromisoformat(getattr(event.start, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "start") and hasattr(event.start, "date_time") else None,
-                "End Time": datetime.fromisoformat(getattr(event.end, "date_time", "").replace('Z', '+00:00')).astimezone(LOCAL_TZ) if hasattr(event, "end") and hasattr(event.end, "date_time") else None,
-                "Calendar": getattr(event, "calendar_name", "Default"),
-                "Organizer": getattr(event.organizer.email_address, "name", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
-                "Organizer Email": getattr(event.organizer.email_address, "address", "") if hasattr(event, "organizer") and hasattr(event.organizer, "email_address") else "",
-                "Location": getattr(event.location, "display_name", "") if hasattr(event, "location") else "",
-                "Is Online Meeting": getattr(event, "is_online_meeting", False),
-                "Online Meeting URL": getattr(event, "online_meeting_url", ""),
-                "ID": getattr(event, "id", ""),
-                "Created": getattr(event, "created_date_time", None),
-                "Last Modified": getattr(event, "last_modified_date_time", None),
-                "Categories": ", ".join(event.categories) if hasattr(event, "categories") and event.categories else "",
-                "Importance": getattr(event, "importance", "")
+            # Extract basic event information
+            event_id = event.get("id", "")
+            subject = event.get("subject", "Unknown Subject")
+            
+            # Get calendar name if available
+            calendar_name = event.get("calendarName", "Default")
+            
+            # Get organizer info - safely handle None values
+            organizer_name = ""
+            organizer_email = ""
+            if event.get("organizer") is not None and event.get("organizer", {}).get("emailAddress") is not None:
+                organizer_name = event["organizer"]["emailAddress"].get("name", "")
+                organizer_email = event["organizer"]["emailAddress"].get("address", "")
+            
+            # Get time information - safely handle None values
+            start_time = None
+            if event.get("start") is not None and event["start"].get("dateTime") is not None:
+                start_str = event["start"]["dateTime"]
+                timezone = event["start"].get("timeZone", "UTC")
+                try:
+                    # Parse the time string
+                    start_time = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                    # Convert to local timezone if possible
+                    try:
+                        if timezone != "UTC":
+                            timezone_obj = pytz.timezone(timezone)
+                            start_time = start_time.replace(tzinfo=pytz.UTC).astimezone(timezone_obj)
+                        # Always convert to local timezone for display
+                        start_time = start_time.astimezone(LOCAL_TZ)
+                    except Exception:
+                        # If timezone conversion fails, keep UTC
+                        pass
+                except Exception:
+                    start_time = datetime.now(LOCAL_TZ)
+            
+            end_time = None
+            if event.get("end") is not None and event["end"].get("dateTime") is not None:
+                end_str = event["end"]["dateTime"]
+                timezone = event["end"].get("timeZone", "UTC")
+                try:
+                    # Parse the time string
+                    end_time = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                    # Convert to local timezone if possible
+                    try:
+                        if timezone != "UTC":
+                            timezone_obj = pytz.timezone(timezone)
+                            end_time = end_time.replace(tzinfo=pytz.UTC).astimezone(timezone_obj)
+                        # Always convert to local timezone for display
+                        end_time = end_time.astimezone(LOCAL_TZ)
+                    except Exception:
+                        # If timezone conversion fails, keep UTC
+                        pass
+                except Exception:
+                    if start_time:
+                        end_time = start_time + timedelta(hours=1)
+                    else:
+                        end_time = datetime.now(LOCAL_TZ) + timedelta(hours=1)
+            elif start_time:
+                # Default to start + 1 hour if no end time found
+                end_time = start_time + timedelta(hours=1)
+            
+            # Calculate duration in minutes
+            duration_minutes = 0
+            if start_time and end_time:
+                duration_minutes = (end_time - start_time).total_seconds() / 60
+            
+            # Get location information - safely handle None
+            location = ""
+            if event.get("location") is not None:
+                location = event["location"].get("displayName", "")
+            
+            # Get online meeting info - safely handle None
+            is_online_meeting = event.get("isOnlineMeeting", False)
+            online_meeting_url = event.get("onlineMeetingUrl", "")
+            if not online_meeting_url and event.get("onlineMeeting") is not None:
+                online_meeting_url = event["onlineMeeting"].get("joinUrl", "")
+            
+            # Get attendees - safely handle None
+            attendees = []
+            if event.get("attendees") is not None:
+                for attendee in event["attendees"]:
+                    if attendee.get("emailAddress") is not None:
+                        attendee_name = attendee["emailAddress"].get("name", "")
+                        attendee_email = attendee["emailAddress"].get("address", "")
+                        attendee_type = attendee.get("type", "")
+                        attendee_response = ""
+                        if attendee.get("status") is not None:
+                            attendee_response = attendee["status"].get("response", "")
+                        
+                        attendees.append({
+                            "name": attendee_name,
+                            "email": attendee_email,
+                            "type": attendee_type,
+                            "response": attendee_response
+                        })
+            
+            # Get body/description - safely handle None
+            body_content = ""
+            if event.get("body") is not None and event["body"].get("content") is not None:
+                body_content = event["body"]["content"]
+            
+            # Create standardized event object
+            event_obj = {
+                "ID": event_id,
+                "Subject": subject,
+                "Calendar": calendar_name,
+                "Start Time": start_time,
+                "End Time": end_time,
+                "Duration (min)": duration_minutes,
+                "Organizer": organizer_name,
+                "Organizer Email": organizer_email,
+                "Location": location,
+                "Is Online Meeting": is_online_meeting,
+                "Online Meeting URL": online_meeting_url,
+                "Attendee Count": len(attendees),
+                "Attendees": ", ".join([f"{a['name']} ({a['email']})" for a in attendees if a["name"] or a["email"]]),
+                "Body": body_content
             }
             
-            # Get attendees
-            attendees = []
-            if hasattr(event, "attendees") and event.attendees:
-                for attendee in event.attendees:
-                    if hasattr(attendee, "email_address") and hasattr(attendee.email_address, "address"):
-                        attendees.append(getattr(attendee.email_address, "address", ""))
-            
-            event_data["Attendees"] = ", ".join(attendees)
-            
-            # Extract content from body if available
-            if hasattr(event, "body") and hasattr(event.body, "content"):
-                event_data["Body"] = event.body.content
-            else:
-                event_data["Body"] = ""
-            
-            processed_events.append(event_data)
-        except Exception as e:
-            st.warning(f"Error processing calendar event: {str(e)}")
+            processed_events.append(event_obj)
+        except Exception:
+            error_count += 1
             continue
     
     return processed_events
@@ -521,7 +497,7 @@ def render_calendar_tab(df):
     st.markdown("""
     <div style="background-color: white; padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
         <h4 style="margin-top: 0; color: #2c3e50;">ℹ️ Calendar Integration</h4>
-        <p>This feature fetches your Outlook/Microsoft 365 calendar events. Due to Microsoft Graph API limitations, events are first retrieved without date filtering and then filtered client-side to match your selected date range.</p>
+        <p>This feature fetches events from the <strong>info-usa@accesscare.health</strong> calendar by default. Due to Microsoft Graph API limitations, events are first retrieved without date filtering and then filtered client-side to match your selected date range.</p>
         <p style="margin-bottom: 0; font-style: italic; color: #7f8c8d;">Note: If you have many calendar events, it may take longer to load and filter. Consider using a shorter date range if you experience performance issues.</p>
     </div>
     """, unsafe_allow_html=True)
@@ -540,6 +516,14 @@ def render_calendar_tab(df):
     if cal_start_date > cal_end_date:
         st.error("Start date must be before end date")
         return
+    
+    # Add calendar selection option
+    calendar_email = st.text_input(
+        "Calendar Email (Optional)", 
+        value="info-usa@accesscare.health",
+        placeholder="info-usa@accesscare.health", 
+        help="Enter email address of the calendar to fetch. Default is info-usa@accesscare.health"
+    )
     
     cal_max_results = st.slider("Max Calendar Events", 50, 1000, 200, key="cal_max_events")
     
@@ -625,117 +609,137 @@ def render_calendar_tab(df):
     if fetch_cal_button:
         with st.spinner("Fetching calendar events..."):
             try:
-                # Fetch calendar events asynchronously
-                calendar_events = asyncio.run(fetch_calendar_events(cal_start_date, cal_end_date, cal_max_results))
+                # Fetch calendar events asynchronously with the selected calendar
+                calendar_events = asyncio.run(fetch_calendar_events(cal_start_date, cal_end_date, cal_max_results, calendar_email))
                 
                 if calendar_events:
                     # Convert to DataFrame
                     cal_df = pd.DataFrame(calendar_events)
                     
+                    # Filter the events to the selected date range
+                    if "Start Time" in cal_df.columns:
+                        # Check if events have valid dates
+                        valid_dates = cal_df["Start Time"].notna()
+                        date_filtered_df = cal_df[valid_dates].copy()
+                        
+                        if len(date_filtered_df) > 0:
+                            # Apply date filter for the selected range
+                            if cal_start_date and cal_end_date:
+                                date_filtered_df = date_filtered_df[
+                                    (date_filtered_df["Start Time"].dt.date >= cal_start_date) &
+                                    (date_filtered_df["Start Time"].dt.date <= cal_end_date)
+                                ]
+                                
+                                # Update the dataframe with filtered results
+                                cal_df = date_filtered_df
+                    
                     # Store in session state
                     st.session_state['calendar_df'] = cal_df
                     
-                    # Display success message
-                    st.success(f"Successfully fetched {len(cal_df)} calendar events")
-                    
-                    # Display event metrics with improved styling
-                    st.markdown("""
-                    <div style="margin: 1.5rem 0 1rem 0;">
-                        <h3 style="font-size: 1.5rem;">📊 Event Metrics</h3>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    metric_cols = st.columns(3)
-                    with metric_cols[0]:
-                        st.metric("Total Events", len(cal_df))
-                    
-                    online_count = cal_df["Is Online Meeting"].sum() if "Is Online Meeting" in cal_df.columns else 0
-                    with metric_cols[1]:
-                        st.metric("Online Meetings", online_count)
-                    
-                    unique_organizers = cal_df["Organizer"].nunique() if "Organizer" in cal_df.columns else 0
-                    with metric_cols[2]:
-                        st.metric("Unique Organizers", unique_organizers)
-                    
-                    # Create visualizations with improved styling
-                    st.markdown("""
-                    <div style="margin: 2rem 0 1rem 0;">
-                        <h3 style="font-size: 1.5rem;">📊 Event Distribution</h3>
-                        <p style="color: #7f8c8d; margin-top: 0.3rem;">Analysis of events by day of week</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    try:
-                        # Events by day of week
-                        cal_df["Day of Week"] = cal_df["Start Time"].dt.day_name()
-                        day_counts = cal_df.groupby("Day of Week").size().reset_index(name="Count")
-                        day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                        day_counts["Day Order"] = day_counts["Day of Week"].apply(lambda x: day_order.index(x) if x in day_order else 999)
-                        day_counts = day_counts.sort_values("Day Order")
+                    if len(cal_df) > 0:
+                        # Display success message
+                        st.success(f"Successfully fetched {len(cal_df)} calendar events in the selected date range")
                         
-                        fig = px.bar(
-                            day_counts,
-                            x="Day of Week",
-                            y="Count",
-                            title="Events by Day of Week",
-                            category_orders={"Day of Week": day_order},
-                            color="Count",
-                            color_continuous_scale="viridis"
-                        )
-                        fig.update_layout(
-                            height=400,
-                            coloraxis_showscale=False,
-                            margin=dict(l=20, r=20, t=50, b=20),
-                            title_font=dict(size=18),
-                            plot_bgcolor='rgba(0,0,0,0.02)',
-                            paper_bgcolor='rgba(0,0,0,0)'
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    except Exception as e:
-                        st.warning(f"Could not create day of week visualization: {str(e)}")
-                    
-                    # Show data table with improved styling
-                    st.markdown("""
-                    <div style="margin: 2rem 0 1rem 0;">
-                        <h3 style="font-size: 1.5rem;">📋 Calendar Events</h3>
-                        <p style="color: #7f8c8d; margin-top: 0.3rem;">Detailed list of all calendar events</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Add search functionality
-                    search_term = st.text_input("🔍 Search by subject or organizer", key="calendar_search")
-                    
-                    if "Body" in cal_df.columns:
-                        # Remove body column to save space
-                        display_df = cal_df.drop(columns=["Body"])
-                    else:
-                        display_df = cal_df
-                    
-                    # Filter data if search term is provided
-                    if search_term:
-                        filtered_df = display_df[
-                            display_df["Subject"].str.contains(search_term, case=False, na=False) |
-                            display_df["Organizer"].str.contains(search_term, case=False, na=False)
-                        ]
-                        st.dataframe(filtered_df, use_container_width=True)
-                        if len(filtered_df) == 0:
-                            st.info(f"No results found for '{search_term}'")
+                        # Display event metrics with improved styling
+                        st.markdown("""
+                        <div style="margin: 1.5rem 0 1rem 0;">
+                            <h3 style="font-size: 1.5rem;">📊 Event Metrics</h3>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        metric_cols = st.columns(3)
+                        with metric_cols[0]:
+                            st.metric("Total Events", len(cal_df))
+                        
+                        online_count = cal_df["Is Online Meeting"].sum() if "Is Online Meeting" in cal_df.columns else 0
+                        with metric_cols[1]:
+                            st.metric("Online Meetings", online_count)
+                        
+                        unique_organizers = cal_df["Organizer"].nunique() if "Organizer" in cal_df.columns else 0
+                        with metric_cols[2]:
+                            st.metric("Unique Organizers", unique_organizers)
+                        
+                        # Create visualizations with improved styling
+                        st.markdown("""
+                        <div style="margin: 2rem 0 1rem 0;">
+                            <h3 style="font-size: 1.5rem;">📊 Event Distribution</h3>
+                            <p style="color: #7f8c8d; margin-top: 0.3rem;">Analysis of events by day of week</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        try:
+                            # Events by day of week
+                            cal_df["Day of Week"] = cal_df["Start Time"].dt.day_name()
+                            day_counts = cal_df.groupby("Day of Week").size().reset_index(name="Count")
+                            day_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                            day_counts["Day Order"] = day_counts["Day of Week"].apply(lambda x: day_order.index(x) if x in day_order else 999)
+                            day_counts = day_counts.sort_values("Day Order")
+                            
+                            fig = px.bar(
+                                day_counts,
+                                x="Day of Week",
+                                y="Count",
+                                title="Events by Day of Week",
+                                category_orders={"Day of Week": day_order},
+                                color="Count",
+                                color_continuous_scale="viridis"
+                            )
+                            fig.update_layout(
+                                height=400,
+                                coloraxis_showscale=False,
+                                margin=dict(l=20, r=20, t=50, b=20),
+                                title_font=dict(size=18),
+                                plot_bgcolor='rgba(0,0,0,0.02)',
+                                paper_bgcolor='rgba(0,0,0,0)'
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"Could not create day of week visualization: {str(e)}")
+                        
+                        # Show data table with improved styling
+                        st.markdown("""
+                        <div style="margin: 2rem 0 1rem 0;">
+                            <h3 style="font-size: 1.5rem;">📋 Calendar Events</h3>
+                            <p style="color: #7f8c8d; margin-top: 0.3rem;">Detailed list of all calendar events</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Add search functionality
+                        search_term = st.text_input("🔍 Search by subject or organizer", key="calendar_search")
+                        
+                        if "Body" in cal_df.columns:
+                            # Remove body column to save space
+                            display_df = cal_df.drop(columns=["Body"])
                         else:
-                            st.caption(f"Showing {len(filtered_df)} of {len(display_df)} events")
+                            display_df = cal_df
+                        
+                        # Filter data if search term is provided
+                        if search_term:
+                            filtered_df = display_df[
+                                display_df["Subject"].str.contains(search_term, case=False, na=False) |
+                                display_df["Organizer"].str.contains(search_term, case=False, na=False)
+                            ]
+                            st.dataframe(filtered_df, use_container_width=True)
+                            if len(filtered_df) == 0:
+                                st.info(f"No results found for '{search_term}'")
+                            else:
+                                st.caption(f"Showing {len(filtered_df)} of {len(display_df)} events")
+                        else:
+                            st.dataframe(display_df, use_container_width=True)
+                        
+                        # Download option with improved styling
+                        csv = cal_df.to_csv(index=False)
+                        st.download_button(
+                            "📥 Download Calendar Events CSV",
+                            csv,
+                            "calendar_events.csv",
+                            "text/csv",
+                            key="download-calendar"
+                        )
                     else:
-                        st.dataframe(display_df, use_container_width=True)
-                    
-                    # Download option with improved styling
-                    csv = cal_df.to_csv(index=False)
-                    st.download_button(
-                        "📥 Download Calendar Events CSV",
-                        csv,
-                        "calendar_events.csv",
-                        "text/csv",
-                        key="download-calendar"
-                    )
+                        st.warning("No calendar events found for the selected date range.")
                 else:
-                    st.warning("No calendar events found in the selected date range")
+                    st.warning("No calendar events found for the selected date range")
             except Exception as e:
                 error_message = str(e)
                 st.error(f"Error fetching calendar events: {error_message}")
@@ -763,9 +767,6 @@ def render_calendar_tab(df):
                         <li><strong>Authentication errors:</strong> Make sure your authentication credentials are valid and not expired</li>
                         <li><strong>Date formatting issues:</strong> Ensure dates are properly formatted in ISO 8601 format with 'Z' suffix</li>
                     </ul>
-                    
-                    <h5 style="color: #c62828; margin-top: 0.8rem;">Microsoft Graph SDK Version</h5>
-                    <p>Parameter names can vary between SDK versions. Check your SDK version and refer to the latest Microsoft Graph API documentation.</p>
                 </div>
                 """, unsafe_allow_html=True)
     

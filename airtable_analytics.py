@@ -157,7 +157,7 @@ def create_pnl_dashboard(df):
             text='Net_Profit'
         )
         
-        fig.update_traces(texttemplate='${text:,.2f}', textposition='outside')
+        fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
         
         # Use the safe layout update helper
         safe_update_layout(fig,
@@ -220,7 +220,7 @@ def create_pnl_dashboard(df):
         valid_months_df = df.dropna(subset=['Service_Month'])
         if not valid_months_df.empty and pd.api.types.is_datetime64_any_dtype(valid_months_df['Service_Month']):
             # Calculate YoY or QoQ growth if possible
-            monthly_data = valid_months_df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
+            monthly_data = valid_months_df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
                 'Revenue_Total': 'sum',
                 'Net_Profit': 'sum'
             }).reset_index()
@@ -270,7 +270,7 @@ def create_pnl_dashboard(df):
     if 'Service_Month' in df.columns:
         valid_months_df = df.dropna(subset=['Service_Month'])
         if not valid_months_df.empty and pd.api.types.is_datetime64_any_dtype(valid_months_df['Service_Month']):
-            monthly_data = valid_months_df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
+            monthly_data = valid_months_df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
                 'Revenue_Total': 'sum',
                 'Expense_COGS_Total': 'sum',
                 'Net_Profit': 'sum'
@@ -684,7 +684,7 @@ def create_pnl_dashboard(df):
                 
                 if not client_monthly.empty:
                     # Group by month and client
-                    client_trends = client_monthly.groupby([pd.Grouper(key='Service_Month', freq='ME'), 'Client']).agg({
+                    client_trends = client_monthly.groupby([pd.Grouper(key='Service_Month', freq='M'), 'Client']).agg({
                         'Revenue_Total': 'sum',
                         'Net_Profit': 'sum'
                     }).reset_index()
@@ -741,7 +741,7 @@ def create_pnl_dashboard(df):
                     st.plotly_chart(fig, use_container_width=True)
                 
             # Monthly trends analysis
-            monthly_trends = valid_months_df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
+            monthly_trends = valid_months_df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
                 'Revenue_Total': 'sum',
                 'Expense_COGS_Total': 'sum',
                 'Net_Profit': 'sum'

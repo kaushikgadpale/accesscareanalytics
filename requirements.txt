@@ -5,18 +5,12 @@ plotly==5.18.0
 python-dotenv==1.0.0
 pytz==2023.3
 requests==2.31.0
-msgraph-core==1.0.0
-msgraph-sdk==1.0.0
+msal==1.25.0
 streamlit-extras==0.3.5
 
 # Azure authentication
 azure-identity==1.15.0 
 azure-core==1.30.0
-msal==1.25.0
-microsoft-kiota-abstractions==1.9.3
-
-# Microsoft Graph API dependencies
-msgraph-beta-sdk==1.0.0
 
 # For phone number validation and formatting
 phonenumbers==8.13.24
