@@ -132,18 +132,6 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
     appointments = []
     progress_bar = st.progress(0)
     
-    # Debug information
-    st.write(f"Debug: Type of businesses = {type(businesses)}")
-    if businesses:
-        if isinstance(businesses, list):
-            st.write(f"Debug: Number of businesses = {len(businesses)}")
-            if len(businesses) > 0:
-                st.write(f"Debug: First business type = {type(businesses[0])}")
-                st.write(f"Debug: First business value = {businesses[0]}")
-        else:
-            st.write(f"Debug: Single business type = {type(businesses)}")
-            st.write(f"Debug: Business value = {businesses}")
-    
     # Format dates for API - ensure we use UTC
     start_datetime = datetime.combine(start_date, datetime.min.time()).astimezone(LOCAL_TZ).astimezone(pytz.UTC)
     end_datetime = datetime.combine(end_date, datetime.max.time()).astimezone(LOCAL_TZ).astimezone(pytz.UTC)
@@ -163,10 +151,6 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
     if not businesses:
         businesses = await fetch_businesses()
     
-    # Ensure businesses is a list
-    if not isinstance(businesses, list):
-        businesses = [businesses]
-    
     graph_client = await get_graph_client()
     if not graph_client:
         st.error("Failed to initialize Graph client")
@@ -175,36 +159,18 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
     for idx, business in enumerate(businesses):
         try:
             # Get business ID and name
-            if isinstance(business, dict) and "id" in business and "name" in business:
+            if isinstance(business, dict):
                 business_id = business["id"]
                 business_name = business["name"]
-                st.write(f"Debug: Processing business from dict: {business_name}")
-            elif isinstance(business, str):
-                # If it's just a string ID, fetch the business details
-                st.write(f"Debug: Processing business from string ID: {business}")
-                all_businesses = await fetch_businesses()
-                
-                # Try to find by ID first
-                try:
-                    business_info = next((b for b in all_businesses if b["id"] == business), None)
-                    if not business_info:
-                        # Try to find by name
-                        business_info = next((b for b in all_businesses if b["name"] == business), None)
-                    
-                    if not business_info:
-                        st.warning(f"Could not find business information for {business}")
-                        continue
-                        
-                    business_id = business_info["id"]
-                    business_name = business_info["name"]
-                    st.write(f"Debug: Found business details: {business_name} ({business_id})")
-                except Exception as lookup_err:
-                    st.error(f"Error looking up business details: {str(lookup_err)}")
-                    st.write(f"Debug: all_businesses = {all_businesses}")
-                    continue
             else:
-                st.warning(f"Invalid business format: {business} of type {type(business)}")
-                continue
+                # If it's just a string (business name), fetch the ID
+                all_businesses = await fetch_businesses()
+                business_info = next((b for b in all_businesses if b["name"] == business), None)
+                if not business_info:
+                    st.warning(f"Could not find business ID for {business}")
+                    continue
+                business_id = business_info["id"]
+                business_name = business
             
             # Fetch business details
             business_details = await fetch_business_details(business_id)
@@ -220,7 +186,6 @@ async def fetch_appointments(businesses, start_date, end_date, max_results):
                 query_parameters=query_params
             )
 
-            st.write(f"Debug: Fetching calendar view for business ID: {business_id}")
             result = await graph_client.solutions.booking_businesses.by_booking_business_id(business_id).calendar_view.get(
                 request_configuration=request_configuration
             )
