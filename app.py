@@ -2465,574 +2465,192 @@ def display_phone_validation_output(results_df, summary, results_type="general")
 
 # --- Outlook Import Prep Tool --- 
 def render_outlook_import_prep_tool():
+    """Render the Outlook Contact Import Preparation Tool"""
+    from outlook_contact_import import (
+        format_phone_number, 
+        process_contacts_file, 
+        create_status_chart, 
+        create_country_chart,
+        create_duplicate_chart,
+        prepare_outlook_contacts
+    )
+    
     st.header("Outlook Contact Import Preparation Tool")
     
-    # Add debugging panel
-    with st.expander("⚠️ Debug Information", expanded=False):
-        st.markdown("### Session State Debugging")
-        st.write("Current step:", st.session_state.get("outlook_prep_step", "No step set"))
-        st.write("Has uploaded data:", "outlook_prep_uploaded_df" in st.session_state)
-        st.write("Has column mapping:", "outlook_prep_column_mapping" in st.session_state)
-        st.write("Has analysis results:", "outlook_prep_analysis_results" in st.session_state)
-        
-        if "outlook_prep_analysis_results" in st.session_state and st.session_state.outlook_prep_analysis_results:
-            st.write("Analysis results keys:", list(st.session_state.outlook_prep_analysis_results.keys()))
-            
-        if st.button("Reset Tool State"):
-            for key in list(st.session_state.keys()):
-                if key.startswith("outlook_prep_"):
-                    del st.session_state[key]
-            st.success("Tool state has been reset")
-            st.rerun()
-
-    # Add the introduction card
     st.markdown("""
     <div class="card">
         <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-            <i class="bi bi-person-check-fill" style="font-size: 1.5rem; color: var(--color-primary-action);"></i>
-            <h3 style="margin:0;">Prepare Contacts for Outlook Import</h3>
+            <i class="bi bi-person-lines-fill" style="font-size: 1.5rem; color: var(--color-primary-action);"></i>
+            <h3 style="margin:0;">Prepare Contacts for Outlook</h3>
         </div>
-        <p>This tool helps you analyze and clean a CSV file (typically an Outlook export) before re-importing to Outlook. 
-        It identifies potential duplicates, validates phone numbers, and flags common issues.</p>
+        <p>This tool helps you prepare contact lists for import into Microsoft Outlook. 
+        It can detect duplicates and format phone numbers correctly for US, UK, Ireland, Denmark, and Philippines.</p>
         <ul>
-            <li>Upload your CSV file (e.g., an export from Outlook).</li>
-            <li>Map your file's columns to standard contact fields.</li>
-            <li>Configure duplicate detection criteria.</li>
-            <li>Review the analysis and (soon) download a cleaned/annotated file.</li>
+            <li>Validate and format phone numbers for selected countries</li>
+            <li>Detect duplicate contacts by phone, email, and name</li>
+            <li>Find similar names using fuzzy matching</li>
+            <li>Export in Outlook-compatible format</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
-
-    # Initialize session state for this tool
-    if 'outlook_prep_uploaded_df' not in st.session_state:
-        st.session_state.outlook_prep_uploaded_df = None
-    if 'outlook_prep_column_mapping' not in st.session_state:
-        st.session_state.outlook_prep_column_mapping = {}
-    if 'outlook_prep_analysis_results' not in st.session_state:
-        st.session_state.outlook_prep_analysis_results = None
-
-    # Define target internal fields (keys) and their typical Outlook export names (values for default mapping)
-    TARGET_FIELDS = {
-        "FirstName": "First Name",
-        "MiddleName": "Middle Name",
-        "LastName": "Last Name",
-        "Email1": "E-mail Address",
-        "Email2": "E-mail 2 Address",
-        "Email3": "E-mail 3 Address",
-        "MobilePhone": "Mobile Phone",
-        "HomePhone": "Home Phone",
-        "BusinessPhone": "Business Phone",
-        # Add other fields as needed, e.g., Company, JobTitle, Addresses
-    }
-
-    uploaded_file_outlook = st.file_uploader(
-        "Upload Outlook Export CSV File",
-        type=["csv"],
-        key="outlook_prep_uploader",
-        help="Upload the CSV file you exported from Outlook or intend to import."
-    )
-
-    if uploaded_file_outlook is not None:
-        try:
-            df = pd.read_csv(uploaded_file_outlook)
-            st.session_state.outlook_prep_uploaded_df = df
-            st.success(f"Successfully uploaded '{uploaded_file_outlook.name}' with {len(df)} rows and {len(df.columns)} columns.")
-            # Reset previous mapping and results if a new file is uploaded
-            st.session_state.outlook_prep_column_mapping = {}
-            st.session_state.outlook_prep_analysis_results = None 
-        except Exception as e:
-            st.error(f"Error reading CSV file: {e}")
-            st.session_state.outlook_prep_uploaded_df = None
-
-    if st.session_state.outlook_prep_uploaded_df is not None:
-        df = st.session_state.outlook_prep_uploaded_df
-        st.markdown("---")
-        st.markdown("#### 1. Map Your CSV Columns")
-        st.markdown("""Match the columns from your uploaded CSV to the standard contact fields. 
-                    The tool will try to guess based on common Outlook export names.""", unsafe_allow_html=False) # Explicitly set unsafe_allow_html=False as it's not HTML
-
-        available_csv_columns = ["<Not Mapped>"] + df.columns.tolist()
-        current_mapping = st.session_state.outlook_prep_column_mapping.copy()
-
-        cols_per_row = 3
-        field_keys = list(TARGET_FIELDS.keys())
+    
+    # Add fuzzy matching options
+    col1, col2 = st.columns(2)
+    with col1:
+        enable_fuzzy = st.checkbox("Enable fuzzy name matching", value=True, 
+                                  help="Find potential duplicates with similar but not identical names")
+    with col2:
+        if enable_fuzzy:
+            fuzzy_threshold = st.slider("Fuzzy matching threshold", min_value=70, max_value=95, value=85,
+                                       help="Higher values require names to be more similar to be considered a match")
+        else:
+            fuzzy_threshold = 85
+    
+    uploaded_file = st.file_uploader("Choose a contacts file", type=["csv", "xlsx", "xls"],
+                                    key="outlook_import_file_uploader",
+                                    help="Upload a CSV or Excel file with your contacts")
+    
+    if uploaded_file is not None:
+        with st.spinner("Processing your file..."):
+            result, error = process_contacts_file(uploaded_file, fuzzy_match=enable_fuzzy, fuzzy_threshold=fuzzy_threshold)
         
-        for i in range(0, len(field_keys), cols_per_row):
-            row_field_keys = field_keys[i:i+cols_per_row]
-            map_cols = st.columns(cols_per_row)
-            for idx, field_key in enumerate(row_field_keys):
-                with map_cols[idx]:
-                    # Attempt default mapping
-                    default_outlook_name = TARGET_FIELDS[field_key]
-                    default_index = 0
-                    if default_outlook_name in available_csv_columns:
-                        default_index = available_csv_columns.index(default_outlook_name)
-                    elif field_key in available_csv_columns: # Fallback to internal key name if it exists as a header
-                        default_index = available_csv_columns.index(field_key)
-                    
-                    # If already mapped, use that, otherwise use default
-                    selected_column = current_mapping.get(field_key, available_csv_columns[default_index])
-                    if selected_column not in available_csv_columns: # handle case where previously mapped col no longer exists
-                        selected_column = "<Not Mapped>"
-                        current_mapping[field_key] = "<Not Mapped>"
-                    else:
-                         current_mapping[field_key] = selected_column # ensure it is in current_mapping for the selectbox
-
-                    mapped_col = st.selectbox(
-                        f"Map: **{field_key}** (Standard Field)",
-                        options=available_csv_columns,
-                        index=available_csv_columns.index(selected_column),
-                        key=f"map_{field_key}"
-                    )
-                    current_mapping[field_key] = mapped_col if mapped_col != "<Not Mapped>" else None
-        
-        st.session_state.outlook_prep_column_mapping = {k: v for k, v in current_mapping.items() if v is not None}
-
-        if st.button("Proceed to Duplicate Detection Setup", type="primary"):
-            # Basic check: Ensure at least one critical field is mapped for duplicate checking
-            mapped_fields_for_dup_check = [
-                st.session_state.outlook_prep_column_mapping.get("Email1"),
-                st.session_state.outlook_prep_column_mapping.get("MobilePhone"),
-                (st.session_state.outlook_prep_column_mapping.get("FirstName") and st.session_state.outlook_prep_column_mapping.get("LastName"))
-            ]
-            if not any(mapped_fields_for_dup_check):
-                st.error("Please map at least one of: E-mail Address, Mobile Phone, or both First and Last Name before proceeding.")
-            else:
-                st.session_state.outlook_prep_step = "deduplication_setup" # Fictional state to move to next UI part
-                st.rerun() # To update UI based on new step
-
-        # Placeholder for next steps (Deduplication setup, Analysis)
-        if st.session_state.get("outlook_prep_step") == "deduplication_setup":
-            st.markdown("---")
-            st.markdown("#### 2. Configure Duplicate Detection")
+        if error:
+            st.error(error)
+        elif result:
+            # Display statistics
+            st.success("File processed successfully!")
             
-            mapped_columns = st.session_state.outlook_prep_column_mapping
-            # Filter available fields for duplicate checking to those actually mapped by the user
-            available_fields_for_exact_match = [mf_key for mf_key, mf_val in TARGET_FIELDS.items() if mapped_columns.get(mf_key)]
-            # Add a conceptual "FullName" if both FirstName and LastName are mapped
-            if mapped_columns.get("FirstName") and mapped_columns.get("LastName"):
-                available_fields_for_exact_match.append("FullName (First + Last)") # Conceptual field
-
-            if not any(available_fields_for_exact_match):
-                st.warning("No fields suitable for duplicate detection have been mapped. Please map fields like Email, Phone, or Name in Step 1.")
-                st.stop()
-
-            # Initialize duplicate_check_fields in session state if not present
-            if 'outlook_prep_duplicate_check_fields' not in st.session_state:
-                st.session_state.outlook_prep_duplicate_check_fields = []
-
-            selected_exact_match_fields = st.multiselect(
-                "Select field(s) for **exact** duplicate checking:",
-                options=available_fields_for_exact_match,
-                default=[f for f in st.session_state.outlook_prep_duplicate_check_fields if f in available_fields_for_exact_match],
-                help="Contacts will be considered exact duplicates if ALL selected fields match."
-            )
-            st.session_state.outlook_prep_duplicate_check_fields = selected_exact_match_fields
-
-            # Fuzzy matching options (only if FirstName and LastName are mapped)
-            can_do_fuzzy = mapped_columns.get("FirstName") and mapped_columns.get("LastName")
-            if 'outlook_prep_enable_fuzzy_matching' not in st.session_state:
-                 st.session_state.outlook_prep_enable_fuzzy_matching = False # Default to False
-            if 'outlook_prep_fuzzy_threshold' not in st.session_state:
-                 st.session_state.outlook_prep_fuzzy_threshold = 85 # Default threshold
-
-            if can_do_fuzzy:
-                st.session_state.outlook_prep_enable_fuzzy_matching = st.checkbox(
-                    "Enable Fuzzy Name Matching (for First + Last Name)", 
-                    value=st.session_state.outlook_prep_enable_fuzzy_matching,
-                    help="Uses string similarity to find non-exact name matches. Slower on very large files."
-                )
-                if st.session_state.outlook_prep_enable_fuzzy_matching:
-                    st.session_state.outlook_prep_fuzzy_threshold = st.slider(
-                        "Fuzzy Match Similarity Threshold (%):", 
-                        min_value=50, 
-                        max_value=100, 
-                        value=st.session_state.outlook_prep_fuzzy_threshold, 
-                        help="Higher means names must be more similar to be considered a fuzzy match."
-                    )
-            else:
-                st.session_state.outlook_prep_enable_fuzzy_matching = False # Ensure it's off if names not mapped
-                st.info("Map both 'FirstName' and 'LastName' in Step 1 to enable Fuzzy Name Matching.")
-
-            if st.button("Run Analysis", type="primary", key="run_outlook_prep_analysis"):
-                if not selected_exact_match_fields and not st.session_state.outlook_prep_enable_fuzzy_matching:
-                    st.error("Please select at least one field for exact duplicate checking or enable fuzzy name matching.")
-                else:
-                    # Add debug info
-                    st.info(f"Starting analysis with {len(st.session_state.outlook_prep_uploaded_df)} records and {len(selected_exact_match_fields)} selected fields.")
-                    
-                    # Perform the actual analysis rather than just moving to the placeholder
-                    with st.spinner("Analyzing your contact data..."):
-                        try:
-                            # Add debug output
-                            st.write("Debug: Starting analysis process")
-                            
-                            # Get our data and settings
-                            df = st.session_state.outlook_prep_uploaded_df
-                            mapping = st.session_state.outlook_prep_column_mapping
-                            
-                            # Show key variables
-                            st.write(f"Debug: Mapping keys: {list(mapping.keys())}")
-                            st.write(f"Debug: DataFrame columns: {list(df.columns)}")
-                            st.write(f"Debug: Selected fields: {selected_exact_match_fields}")
-                            
-                            # Create a results structure to store analysis findings
-                            analysis_results = {
-                                "total_records": len(df),
-                                "exact_duplicates": [],
-                                "fuzzy_duplicates": [],
-                                "invalid_phones": [],
-                                "empty_required": [],  # Add this field to avoid KeyError
-                                "metrics": {
-                                    "total_contacts": len(df),
-                                    "exact_duplicate_count": 0,
-                                    "fuzzy_duplicate_count": 0,
-                                    "invalid_phone_count": 0,
-                                    "empty_required_fields_count": 0,
-                                },
-                                "error": None
-                            }
-                            
-                            # EXACT DUPLICATE CHECK
-                            if selected_exact_match_fields:
-                                st.write("Checking for exact duplicates...")
-                                # Convert Outlook field names to actual columns in the dataframe
-                                field_to_col = {}
-                                for field in selected_exact_match_fields:
-                                    if field == "FullName (First + Last)":
-                                        if mapping.get("FirstName") and mapping.get("LastName"):
-                                            # Create a temporary full name column by concatenating first and last
-                                            df["_temp_fullname"] = df[mapping["FirstName"]].fillna("") + " " + df[mapping["LastName"]].fillna("")
-                                            df["_temp_fullname"] = df["_temp_fullname"].str.strip()
-                                            field_to_col[field] = "_temp_fullname"
-                                    else:
-                                        # Map the field to its corresponding column in the dataframe
-                                        if mapping.get(field):
-                                            field_to_col[field] = mapping[field]
-                            
-                                # Only proceed if we have valid column mappings
-                                check_cols = [col for col in field_to_col.values() if col in df.columns]
-                                if check_cols:
-                                    # Find duplicates based on the selected fields
-                                    duplicate_mask = df.duplicated(subset=check_cols, keep=False)
-                                    duplicates = df[duplicate_mask].copy()
-                                    
-                                    if not duplicates.empty:
-                                        # Group by duplicate values
-                                        for _, group in duplicates.groupby(check_cols):
-                                            if len(group) > 1:  # Ensure it's actually a duplicate group
-                                                analysis_results["exact_duplicates"].append({
-                                                    "fields": [field for field, col in field_to_col.items() if col in check_cols],
-                                                    "count": len(group),
-                                                    "records": group.to_dict('records')
-                                                })
-                                        
-                                        # Update metrics
-                                        analysis_results["metrics"]["exact_duplicate_count"] = sum(len(g["records"]) for g in analysis_results["exact_duplicates"])
-
-                            # Store results in session state before trying other steps (in case they fail)
-                            st.session_state.outlook_prep_analysis_results = analysis_results
-                            
-                            # Debug info
-                            st.write(f"Found {analysis_results['metrics']['exact_duplicate_count']} exact duplicates.")
-                            
-                            # FUZZY DUPLICATE CHECK
-                            if st.session_state.outlook_prep_enable_fuzzy_matching:
-                                st.write("Checking for fuzzy name matches...")
-                                # Only proceed if both first and last name are mapped
-                                if mapping.get("FirstName") and mapping.get("LastName"):
-                                    try:
-                                        # Create a full name for comparison
-                                        df["_fullname"] = df[mapping["FirstName"]].fillna("") + " " + df[mapping["LastName"]].fillna("")
-                                        df["_fullname"] = df["_fullname"].str.strip()
-                                        
-                                        # If there are not many records, do a complete comparison
-                                        # For large datasets, we might want to optimize this with blocking
-                                        if len(df) <= 1000:  # Only do complete comparison for reasonably sized datasets
-                                            fuzzy_threshold = st.session_state.outlook_prep_fuzzy_threshold
-                                            
-                                            # Compare each name with every other name
-                                            for i, row in df.iterrows():
-                                                if not pd.isna(row["_fullname"]) and row["_fullname"].strip():
-                                                    name1 = row["_fullname"]
-                                                    matches = []
-                                                    matched_indices = []
-                                                    
-                                                    # Compare with all other names
-                                                    for j, other_row in df.iterrows():
-                                                        if i != j:  # Don't compare with self
-                                                            if not pd.isna(other_row["_fullname"]) and other_row["_fullname"].strip():
-                                                                name2 = other_row["_fullname"]
-                                                                
-                                                                # Calculate similarity
-                                                                similarity = fuzz.ratio(name1.lower(), name2.lower())
-                                                                
-                                                                # If similar enough but not exact
-                                                                if similarity >= fuzzy_threshold and similarity < 100:
-                                                                    matches.append({
-                                                                        "name": name2,
-                                                                        "similarity": similarity,
-                                                                        "index": j
-                                                                    })
-                                                                    matched_indices.append(j)
-                                                    
-                                                    # If matches found, create a fuzzy duplicate group
-                                                    if matches:
-                                                        # Add this record and all matches to the group
-                                                        group_records = [row.to_dict()]
-                                                        for idx in matched_indices:
-                                                            group_records.append(df.loc[idx].to_dict())
-                                                        
-                                                        # Add to results
-                                                        analysis_results["fuzzy_duplicates"].append({
-                                                            "original": {"name": name1, "index": i},
-                                                            "matches": matches,
-                                                            "records": group_records
-                                                        })
-                                            
-                                            # Update metrics for fuzzy duplicates
-                                            fuzzy_records_count = sum(len(g["records"]) for g in analysis_results["fuzzy_duplicates"])
-                                            analysis_results["metrics"]["fuzzy_duplicate_count"] = fuzzy_records_count
-                                            
-                                            # Debug info
-                                            st.write(f"Found {len(analysis_results['fuzzy_duplicates'])} fuzzy match groups with {fuzzy_records_count} records.")
-                                        else:
-                                            st.warning("Dataset too large for fuzzy matching. Try using a smaller sample.")
-                                    except Exception as e:
-                                        st.error(f"Error in fuzzy matching: {str(e)}")
-                                        analysis_results["error"] = f"Fuzzy matching error: {str(e)}"
-                            
-                            # Update session state with fuzzy results
-                            st.session_state.outlook_prep_analysis_results = analysis_results
-                            
-                            # PHONE VALIDATION
-                            st.write("Validating phone numbers...")
-                            phone_fields = [field for field in ["MobilePhone", "HomePhone", "BusinessPhone"] 
-                                            if mapping.get(field) and mapping[field] in df.columns]
-                            
-                            invalid_phones = []
-                            if phone_fields:
-                                for field in phone_fields:
-                                    col = mapping[field]
-                                    if col in df.columns:
-                                        # Check each phone number
-                                        for idx, row in df.iterrows():
-                                            phone = row[col]
-                                            if pd.notna(phone) and phone:  # Not empty
-                                                try:
-                                                    # Use safer way to call format_phone_strict that won't crash if import fails
-                                                    # First check if function exists in current namespace
-                                                    if 'format_phone_strict' in globals():
-                                                        formatted, status = format_phone_strict(str(phone))
-                                                        if not status.startswith("Valid"):
-                                                            invalid_phones.append({
-                                                                "field": field,
-                                                                "original_value": phone,
-                                                                "status": status,
-                                                                "record": row.to_dict()
-                                                            })
-                                                except Exception as e:
-                                                    st.error(f"Phone validation error: {str(e)}")
-                                                    analysis_results["error"] = f"Phone validation error: {str(e)}"
-                                
-                                # Update metrics
-                                analysis_results["invalid_phones"] = invalid_phones
-                                analysis_results["metrics"]["invalid_phone_count"] = len(invalid_phones)
-                            
-                            # Store results again with phone validation results
-                            st.session_state.outlook_prep_analysis_results = analysis_results
-                            
-                            # CHECK FOR EMPTY REQUIRED FIELDS
-                            st.write("Checking field completeness...")
-                            required_fields = ["FirstName", "LastName", "Email1", "MobilePhone"]
-                            empty_required = []
-                            
-                            for field in required_fields:
-                                if field in mapping and mapping[field] in df.columns:
-                                    col = mapping[field]
-                                    empty_count = df[col].isna().sum() + (df[col] == "").sum()
-                                    
-                                    if empty_count > 0:
-                                        # Calculate percentage
-                                        percentage = (empty_count / len(df)) * 100
-                                        
-                                        empty_required.append({
-                                            "field": field,
-                                            "column": col,
-                                            "count": int(empty_count),
-                                            "percentage": percentage
-                                        })
-                            
-                            # Update results
-                            analysis_results["empty_required"] = empty_required
-                            analysis_results["metrics"]["empty_required_fields_count"] = len(empty_required)
-                                
-                            # Finally update session state with complete results
-                            st.session_state.outlook_prep_analysis_results = analysis_results
-                            st.session_state.outlook_prep_step = "analysis_results"
-                            
-                            # Debug info
-                            st.success("Analysis completed successfully! Navigating to results...")
-                            
-                        except Exception as e:
-                            st.error(f"Error during analysis: {str(e)}")
-                            # Add traceback for better error detection
-                            st.code(traceback.format_exc(), language="python")
-                            # Also print to terminal for easier debugging
-                            print(f"ERROR in analysis: {str(e)}")
-                            print(traceback.format_exc())
-                            # Still update step to show results, but mark error
-                            if 'outlook_prep_analysis_results' not in st.session_state:
-                                st.session_state.outlook_prep_analysis_results = {"error": str(e)}
-                            st.session_state.outlook_prep_step = "analysis_results"
-                    
-                    # Force rerun to show results
-                    st.rerun()
-
-        if st.session_state.get("outlook_prep_step") == "analysis_results":
-            st.markdown("---")
-            st.markdown("#### 3. Analysis Results")
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("Total Contacts", result['stats']['total'])
+            col2.metric("Valid Phone Numbers", result['stats']['valid'])
+            col3.metric("Invalid Numbers", result['stats']['invalid'])
+            col4.metric("Duplicates", result['stats']['duplicates'])
+            col5.metric("Unique Valid Contacts", result['stats']['unique_valid'])
             
-            # Display results if they exist
-            if st.session_state.outlook_prep_analysis_results:
-                results = st.session_state.outlook_prep_analysis_results
+            # Create tabs for different views
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(["Overview", "Valid Contacts", "Invalid Contacts", "Duplicates", "All Contacts"])
+            
+            with tab1:
+                st.subheader("Phone Number Analysis")
                 
-                # Overview metrics
-                st.markdown("##### Contact Data Overview")
-                metrics_cols = st.columns(4)
+                col1, col2 = st.columns(2)
                 
-                with metrics_cols[0]:
-                    st.metric("Total Contacts", results["metrics"]["total_contacts"])
+                with col1:
+                    status_chart = create_status_chart(result['all'])
+                    if status_chart:
+                        st.plotly_chart(status_chart, use_container_width=True)
                 
-                with metrics_cols[1]:
-                    exact_dup_count = results["metrics"]["exact_duplicate_count"]
-                    pct = f"({(exact_dup_count / results['metrics']['total_contacts'] * 100):.1f}%)" if results["metrics"]["total_contacts"] > 0 else ""
-                    st.metric("Exact Duplicates", f"{exact_dup_count} {pct}")
+                with col2:
+                    valid_phones = result['all'][result['all']['Phone Status'].str.startswith('Valid')]
+                    if not valid_phones.empty:
+                        country_chart = create_country_chart(valid_phones)
+                        if country_chart:
+                            st.plotly_chart(country_chart, use_container_width=True)
                 
-                with metrics_cols[2]:
-                    fuzzy_dup_count = results["metrics"]["fuzzy_duplicate_count"]
-                    pct = f"({(fuzzy_dup_count / results['metrics']['total_contacts'] * 100):.1f}%)" if results["metrics"]["total_contacts"] > 0 else ""
-                    st.metric("Fuzzy Duplicates", f"{fuzzy_dup_count} {pct}")
+                # Add duplicate analysis chart
+                if result['duplicate_counts']['total'] > 0:
+                    st.subheader("Duplicate Analysis")
+                    duplicate_chart = create_duplicate_chart(result['duplicate_counts'])
+                    if duplicate_chart:
+                        st.plotly_chart(duplicate_chart, use_container_width=True)
                 
-                with metrics_cols[3]:
-                    invalid_count = results["metrics"]["invalid_phone_count"]
-                    pct = f"({(invalid_count / results['metrics']['total_contacts'] * 100):.1f}%)" if results["metrics"]["total_contacts"] > 0 else ""
-                    st.metric("Invalid Phones", f"{invalid_count} {pct}")
+                st.subheader("Actions")
                 
-                # Create tabs for different result sections
-                result_tabs = st.tabs([
-                    "Exact Duplicates", 
-                    "Fuzzy Matches", 
-                    "Phone Issues",
-                    "Field Completeness"
-                ])
-                
-                # Exact Duplicates Tab
-                with result_tabs[0]:
-                    if results["exact_duplicates"]:
-                        st.markdown(f"##### Found {len(results['exact_duplicates'])} groups of exact duplicates")
-                        
-                        for i, group in enumerate(results["exact_duplicates"]):
-                            with st.expander(f"Duplicate Group #{i+1}: {group['count']} records matching on {', '.join(group['fields'])}"):
-                                if group["records"]:
-                                    st.dataframe(pd.DataFrame(group["records"]))
-                    else:
-                        st.info("No exact duplicates found based on your selected criteria.")
-                
-                # Fuzzy Matches Tab
-                with result_tabs[1]:
-                    if results["fuzzy_duplicates"]:
-                        st.markdown(f"##### Found {len(results['fuzzy_duplicates'])} groups with similar names")
-                        
-                        for i, group in enumerate(results["fuzzy_duplicates"]):
-                            matches_info = [f"{m['name']} ({m['similarity']}% similar)" for m in group["matches"]]
-                            with st.expander(f"Similar Name Group #{i+1}: '{group['original']['name']}' matches {len(matches_info)} others"):
-                                # Display original and matched names with similarity scores
-                                st.markdown("**Original Name:** " + group["original"]["name"])
-                                st.markdown("**Similar to:**")
-                                for match_info in matches_info:
-                                    st.markdown(f"- {match_info}")
-                                
-                                # Display the full records
-                                st.markdown("**Full Records:**")
-                                st.dataframe(pd.DataFrame(group["records"]))
-                    else:
-                        if st.session_state.outlook_prep_enable_fuzzy_matching:
-                            st.info("No similar names found with the current threshold setting.")
-                        else:
-                            st.info("Fuzzy name matching was not enabled.")
-                
-                # Phone Issues Tab
-                with result_tabs[2]:
-                    if results["invalid_phones"]:
-                        st.markdown(f"##### Found {len(results['invalid_phones'])} phone numbers with issues")
-                        
-                        # Convert to DataFrame for easier display
-                        phone_issues_df = pd.DataFrame([
-                            {
-                                "Field": issue["field"],
-                                "Original Value": issue["original_value"],
-                                "Status": issue["status"]
-                            }
-                            for issue in results["invalid_phones"]
-                        ])
-                        
-                        st.dataframe(phone_issues_df)
-                    else:
-                        st.info("No phone number issues detected.")
-                
-                # Field Completeness Tab
-                with result_tabs[3]:
-                    if "empty_required" in results and results["empty_required"]:
-                        st.markdown("##### Required Fields Missing Data")
-                        
-                        # Create a DataFrame for better display
-                        empty_fields_df = pd.DataFrame([
-                            {
-                                "Field": empty["field"],
-                                "Records Missing": empty["count"],
-                                "Percentage": f"{empty['percentage']:.1f}%"
-                            }
-                            for empty in results["empty_required"]
-                        ])
-                        
-                        st.dataframe(empty_fields_df)
-                        
-                        # Create a bar chart to visualize completeness
-                        if not empty_fields_df.empty:
-                            fig = px.bar(
-                                empty_fields_df,
-                                x="Field",
-                                y="Records Missing",
-                                text="Percentage",
-                                title="Required Fields Missing Data",
-                                color="Records Missing"
+                # Generate Outlook-compatible CSV
+                if not result['valid'].empty:
+                    outlook_contacts = prepare_outlook_contacts(result['valid'])
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.download_button(
+                            label="Download All Valid Contacts for Outlook",
+                            data=outlook_contacts.to_csv(index=False),
+                            file_name="outlook_contacts_all.csv",
+                            mime="text/csv"
+                        )
+                        st.caption("File is formatted for direct import into Outlook")
+                    
+                    with col2:
+                        # Download only unique valid contacts
+                        unique_valid = result['valid'][~result['valid']['Is Duplicate']]
+                        if not unique_valid.empty:
+                            unique_outlook_contacts = prepare_outlook_contacts(unique_valid)
+                            st.download_button(
+                                label="Download Unique Valid Contacts for Outlook",
+                                data=unique_outlook_contacts.to_csv(index=False),
+                                file_name="outlook_contacts_unique.csv",
+                                mime="text/csv"
                             )
-                            
-                            fig.update_layout(height=400)
-                            st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("All required fields have data in all records, or no required fields were defined.")
+                            st.caption("Contains only unique contacts, removes duplicates")
+            
+            with tab2:
+                if result['valid'].empty:
+                    st.warning("No valid phone numbers found.")
+                else:
+                    st.write(f"Found {len(result['valid'])} valid phone numbers")
+                    st.dataframe(result['valid'], use_container_width=True)
+                    
+                    st.download_button(
+                        label="Download Valid Contacts CSV",
+                        data=result['valid'].to_csv(index=False),
+                        file_name="valid_contacts.csv",
+                        mime="text/csv"
+                    )
+            
+            with tab3:
+                if result['invalid'].empty:
+                    st.success("No invalid phone numbers found.")
+                else:
+                    st.write(f"Found {len(result['invalid'])} invalid phone numbers")
+                    st.dataframe(result['invalid'], use_container_width=True)
+                    
+                    st.download_button(
+                        label="Download Invalid Contacts CSV",
+                        data=result['invalid'].to_csv(index=False),
+                        file_name="invalid_contacts.csv",
+                        mime="text/csv"
+                    )
+                    
+                    st.info("These numbers need manual correction. Common issues include:")
+                    st.markdown("""
+                    - Missing country code
+                    - Incorrect number of digits
+                    - Unsupported country format (only US, UK, Ireland, Denmark, and Philippines are supported)
+                    """)
+            
+            with tab4:
+                if result['duplicates'].empty:
+                    st.success("No duplicate contacts found.")
+                else:
+                    st.write(f"Found {len(result['duplicates'])} duplicate contacts")
+                    
+                    # Show duplicate type information
+                    col1, col2, col3, col4 = st.columns(4)
+                    col1.metric("Phone Duplicates", result['duplicate_counts'].get('phone', 0))
+                    col2.metric("Email Duplicates", result['duplicate_counts'].get('email', 0))
+                    col3.metric("Exact Name Duplicates", result['duplicate_counts'].get('exact_name', 0))
+                    col4.metric("Fuzzy Name Duplicates", result['duplicate_counts'].get('fuzzy_name', 0))
+                    
+                    st.dataframe(result['duplicates'], use_container_width=True)
+                    
+                    st.download_button(
+                        label="Download Duplicates CSV",
+                        data=result['duplicates'].to_csv(index=False),
+                        file_name="duplicate_contacts.csv",
+                        mime="text/csv"
+                    )
+            
+            with tab5:
+                st.write("All processed contacts")
+                st.dataframe(result['all'], use_container_width=True)
                 
-                # Download cleaned file option (placeholder for now)
-                st.markdown("---")
-                st.markdown("##### Download Options")
-                
-                download_cols = st.columns(2)
-                
-                with download_cols[0]:
-                    st.button("Download Analysis Report (CSV)", disabled=True, 
-                             help="This feature is coming soon.")
-                
-                with download_cols[1]:
-                    st.button("Download Cleaned Contacts (CSV)", disabled=True,
-                             help="This feature is coming soon.")
-            else:
-                st.info("No analysis results available. Please run the analysis first.")
-                # Add button to return to previous step if needed
-                if st.button("Return to Duplicate Detection Setup"):
-                    st.session_state.outlook_prep_step = "deduplication_setup"
-                    st.rerun()
+                st.download_button(
+                    label="Download All Contacts CSV",
+                    data=result['all'].to_csv(index=False),
+                    file_name="all_contacts.csv",
+                    mime="text/csv"
+                )
 
 # Call the main function
 if __name__ == "__main__":

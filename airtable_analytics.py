@@ -1281,129 +1281,189 @@ def render_analytics_dashboard():
             'PNL': {},
             'SOW': {}
         }
+        
+    # Initialize active tab if it doesn't exist
+    if 'active_analytics_tab' not in st.session_state:
+        st.session_state.active_analytics_tab = "Utilization Analytics"
+    
+    # Initialize common filters in session state if they don't exist
+    if 'common_filters' not in st.session_state:
+        st.session_state.common_filters = {}
     
     # Display button to refresh all data
-    if st.button("Refresh All Data"):
-        with st.spinner("Loading data from all Airtable bases..."):
-            # Fetch data from all three bases
-            st.session_state.utilization_data = get_utilization_data()
-            st.session_state.pnl_data = get_pnl_data()
-            st.session_state.sow_data = get_sow_data()
-            st.success("Data loaded successfully!")
+    refresh_col, _ = st.columns([1, 5])
+    with refresh_col:
+        if st.button("🔄 Refresh All Data", use_container_width=True, type="primary"):
+            with st.spinner("Loading data from all Airtable bases..."):
+                # Fetch data from all three bases
+                st.session_state.utilization_data = get_utilization_data()
+                st.session_state.pnl_data = get_pnl_data()
+                st.session_state.sow_data = get_sow_data()
+                st.success("✅ Data loaded successfully!")
     
-    # Create tabs for different analytics views
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Common Filters", "Utilization Analytics", "Financial Performance", "SOW Analytics", "Column Mappings"])
+    # Define the tabs with icons
+    tab_options = {
+        "Utilization Analytics": "📈",
+        "Financial Performance": "💰",
+        "SOW Analytics": "📝",
+        "Column Mappings": "🔧"
+    }
+
+    # Use a horizontal radio selection for navigation with custom CSS to style it like buttons
+    st.markdown("""
+    <style>
+    div.row-widget.stRadio > div {
+        flex-direction: row;
+        justify-content: center;
+    }
+    div.row-widget.stRadio > div[role="radiogroup"] > label {
+        padding: 12px 16px;
+        margin: 0px 6px;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 15px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        outline: none;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        background-color: #f8f9fa;
+        color: #212529;
+    }
+    div.row-widget.stRadio > div[role="radiogroup"] > label:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    div.row-widget.stRadio > div[role="radiogroup"] > label[data-baseweb="radio"] > div:first-child {
+        display: none;
+    }
+    div.row-widget.stRadio > div[role="radiogroup"] > label[aria-checked="true"] {
+        background-color: #4361ee;
+        color: white;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Create the radio buttons for navigation
+    tab_labels = [f"{icon} {name}" for name, icon in tab_options.items()]
+    tab_values = list(tab_options.keys())
+    selected_tab = st.radio("", tab_labels, index=tab_values.index(st.session_state.active_analytics_tab), horizontal=True)
     
-    # Common filters tab
-    with tab1:
-        st.header("Common Dashboard Filters")
-        
-        st.markdown("""
-        <div style="background-color: white; padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <h4 style="margin-top: 0; color: #2c3e50;">🔍 Filter Dashboard Data</h4>
-            <p style="margin-bottom: 0;">Set filters that will apply across all dashboard tabs. These filters will be applied to all visualizations.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Initialize common filters in session state if they don't exist
-        if 'common_filters' not in st.session_state:
-            st.session_state.common_filters = {}
-        
-        # Client filter (common across all data types)
-        client_filter = None
-        if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty and 'Client' in st.session_state.utilization_data.columns:
-            client_options = sorted(st.session_state.utilization_data['Client'].unique().tolist())
-            default_clients = st.session_state.common_filters.get('Client', []) if isinstance(st.session_state.common_filters.get('Client', []), list) else []
-            client_filter = st.multiselect("Client", client_options, 
-                                         default=default_clients)
-        elif st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Client' in st.session_state.pnl_data.columns:
-            # Handle case where Client column might contain lists
-            client_values = set()
-            for val in st.session_state.pnl_data['Client']:
-                if isinstance(val, list):
-                    # If it's a list, add each item individually
-                    for client in val:
-                        client_values.add(str(client))
-                else:
-                    # Otherwise, just add the value as a string
-                    client_values.add(str(val))
-            # Get unique values and sort
-            client_options = sorted(client_values)
-            default_clients = st.session_state.common_filters.get('Client', []) if isinstance(st.session_state.common_filters.get('Client', []), list) else []
-            client_filter = st.multiselect("Client", client_options,
-                                         default=default_clients)
-        else:
-            client_filter = st.text_input("Client (enter name)", value=st.session_state.common_filters.get('Client', ''))
-        
-        # Date range filter
-        date_col1, date_col2 = st.columns(2)
-        
-        with date_col1:
-            # Set default start date to January 1st, 2025
-            default_start_date = datetime(2025, 1, 1).date()
-            start_date = st.date_input("Start Date", 
-                                       value=st.session_state.common_filters.get('date_range', (default_start_date, datetime.now()))[0])
-        with date_col2:
-            end_date = st.date_input("End Date", 
-                                     value=st.session_state.common_filters.get('date_range', (default_start_date, datetime.now()))[1])
-        
-        # Year filter
-        year_options = ["All"]
-        current_year = datetime.now().year
-        year_options.extend(range(current_year - 5, current_year + 2))  # Include next year
-        selected_year = st.selectbox("Year", year_options, 
-                                     index=year_options.index(st.session_state.common_filters.get('Year', 'All')) if st.session_state.common_filters.get('Year', 'All') in year_options else 0)
-        
-        # Site filter - changed to multiselect
-        site_filter = None
-        site_options = []
-        
-        if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty and 'Site' in st.session_state.utilization_data.columns:
-            # Convert all values to strings before sorting
-            site_values = [str(x) for x in st.session_state.utilization_data['Site'].unique()]
-            site_options = sorted(site_values)
-            default_sites = st.session_state.common_filters.get('Site', []) if isinstance(st.session_state.common_filters.get('Site', []), list) else []
-            site_filter = st.multiselect("Site", site_options, default=default_sites)
-        elif st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Site_Location' in st.session_state.pnl_data.columns:
-            # Handle case where Site_Location contains lists
-            site_values = set()
-            for val in st.session_state.pnl_data['Site_Location']:
-                if isinstance(val, list):
-                    # If it's a list, add each item individually
-                    for site in val:
-                        site_values.add(str(site))
-                else:
-                    # Otherwise, just add the value as a string
-                    site_values.add(str(val))
-            # Get unique values and sort
-            site_options = sorted(site_values)
-            default_sites = st.session_state.common_filters.get('Site', []) if isinstance(st.session_state.common_filters.get('Site', []), list) else []
-            site_filter = st.multiselect("Site", site_options, default=default_sites)
-        else:
-            site_filter = st.text_input("Site (enter name)", value=st.session_state.common_filters.get('Site', ''))
-        
-        # Save filters to session state when apply button is clicked
-        if st.button("Apply Filters"):
-            st.session_state.common_filters = {
-                'Client': client_filter if client_filter else None,
-                'date_range': (start_date, end_date),
-                'Year': selected_year if selected_year != "All" else None,
-                'Site': site_filter if site_filter else None
-            }
+    # Extract the tab name from the label
+    for tab_name, icon in tab_options.items():
+        if f"{icon} {tab_name}" == selected_tab:
+            st.session_state.active_analytics_tab = tab_name
+    
+    # Add common filters section at the top of each content section
+    if st.session_state.active_analytics_tab != "Column Mappings":
+        with st.expander("Common Filters", expanded=False):
+            st.markdown("""
+            <div style="background-color: white; padding: 1rem; border-radius: 10px; margin-bottom: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <h4 style="margin-top: 0; color: #2c3e50;">🔍 Filter Dashboard Data</h4>
+                <p style="margin-bottom: 0;">Set filters that will apply across all dashboard tabs.</p>
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Remove None values
-            st.session_state.common_filters = {k: v for k, v in st.session_state.common_filters.items() if v is not None}
+            # Client filter (common across all data types)
+            client_filter = None
+            if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty and 'Client' in st.session_state.utilization_data.columns:
+                client_options = sorted(st.session_state.utilization_data['Client'].unique().tolist())
+                default_clients = st.session_state.common_filters.get('Client', []) if isinstance(st.session_state.common_filters.get('Client', []), list) else []
+                client_filter = st.multiselect("Client", client_options, 
+                                             default=default_clients)
+            elif st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Client' in st.session_state.pnl_data.columns:
+                # Handle case where Client column might contain lists
+                client_values = set()
+                for val in st.session_state.pnl_data['Client']:
+                    if isinstance(val, list):
+                        # If it's a list, add each item individually
+                        for client in val:
+                            client_values.add(str(client))
+                    else:
+                        # Otherwise, just add the value as a string
+                        client_values.add(str(val))
+                # Get unique values and sort
+                client_options = sorted(client_values)
+                default_clients = st.session_state.common_filters.get('Client', []) if isinstance(st.session_state.common_filters.get('Client', []), list) else []
+                client_filter = st.multiselect("Client", client_options,
+                                             default=default_clients)
+            else:
+                client_filter = st.text_input("Client (enter name)", value=st.session_state.common_filters.get('Client', ''))
             
-            st.success("Filters applied! The visualizations in all tabs will be updated.")
+            # Date range filter
+            date_col1, date_col2 = st.columns(2)
             
-        # Clear filters button
-        if st.button("Clear All Filters"):
-            st.session_state.common_filters = {}
-            st.success("All filters cleared!")
-            st.rerun()
+            with date_col1:
+                # Set default start date to January 1st, 2025
+                default_start_date = datetime(2025, 1, 1).date()
+                start_date = st.date_input("Start Date", 
+                                           value=st.session_state.common_filters.get('date_range', (default_start_date, datetime.now()))[0])
+            with date_col2:
+                end_date = st.date_input("End Date", 
+                                         value=st.session_state.common_filters.get('date_range', (default_start_date, datetime.now()))[1])
+            
+            # Year filter
+            year_options = ["All"]
+            current_year = datetime.now().year
+            year_options.extend(range(current_year - 5, current_year + 2))  # Include next year
+            selected_year = st.selectbox("Year", year_options, 
+                                         index=year_options.index(st.session_state.common_filters.get('Year', 'All')) if st.session_state.common_filters.get('Year', 'All') in year_options else 0)
+            
+            # Site filter - changed to multiselect
+            site_filter = None
+            site_options = []
+            
+            if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty and 'Site' in st.session_state.utilization_data.columns:
+                # Convert all values to strings before sorting
+                site_values = [str(x) for x in st.session_state.utilization_data['Site'].unique()]
+                site_options = sorted(site_values)
+                default_sites = st.session_state.common_filters.get('Site', []) if isinstance(st.session_state.common_filters.get('Site', []), list) else []
+                site_filter = st.multiselect("Site", site_options, default=default_sites)
+            elif st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Site_Location' in st.session_state.pnl_data.columns:
+                # Handle case where Site_Location contains lists
+                site_values = set()
+                for val in st.session_state.pnl_data['Site_Location']:
+                    if isinstance(val, list):
+                        # If it's a list, add each item individually
+                        for site in val:
+                            site_values.add(str(site))
+                    else:
+                        # Otherwise, just add the value as a string
+                        site_values.add(str(val))
+                # Get unique values and sort
+                site_options = sorted(site_values)
+                default_sites = st.session_state.common_filters.get('Site', []) if isinstance(st.session_state.common_filters.get('Site', []), list) else []
+                site_filter = st.multiselect("Site", site_options, default=default_sites)
+            else:
+                site_filter = st.text_input("Site (enter name)", value=st.session_state.common_filters.get('Site', ''))
+            
+            # Save filters to session state when apply button is clicked
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Apply Filters", type="primary", use_container_width=True):
+                    st.session_state.common_filters = {
+                        'Client': client_filter if client_filter else None,
+                        'date_range': (start_date, end_date),
+                        'Year': selected_year if selected_year != "All" else None,
+                        'Site': site_filter if site_filter else None
+                    }
+                    
+                    # Remove None values
+                    st.session_state.common_filters = {k: v for k, v in st.session_state.common_filters.items() if v is not None}
+                    
+                    st.success("✅ Filters applied! The visualizations will be updated.")
+                    st.rerun()
+            
+            # Clear filters button
+            with col2:
+                if st.button("Clear All Filters", use_container_width=True):
+                    st.session_state.common_filters = {}
+                    st.success("✅ All filters cleared!")
+                    st.rerun()
     
     # Utilization Analytics tab
-    with tab2:
+    if st.session_state.active_analytics_tab == "Utilization Analytics":
         st.header("Utilization Analytics")
         
         # Add tab-specific filters
@@ -1424,19 +1484,39 @@ def render_analytics_dashboard():
             if tab_client:
                 tab_filters['client'] = tab_client
         
+        # Create columns for the buttons
+        load_col1, load_col2 = st.columns(2)
+        
         # Fetch button to get utilization data
-        if st.button("Load Utilization Data"):
-            with st.spinner("Loading utilization data..."):
-                utilization_df = get_utilization_data(tab_filters)
-                st.session_state.utilization_data = utilization_df
+        with load_col1:
+            if st.button("Load Utilization Data", type="primary", key="load_utilization", use_container_width=True):
+                with st.spinner("Loading utilization data..."):
+                    utilization_df = get_utilization_data(tab_filters)
+                    st.session_state.utilization_data = utilization_df
+                    
+                    # Display column information for debugging
+                    if not utilization_df.empty:
+                        st.success(f"✅ Successfully loaded utilization data with {len(utilization_df)} records")
+                        with st.expander("View Column Information"):
+                            st.write("Available columns in the data:", utilization_df.columns.tolist())
+                    else:
+                        st.warning("No utilization data found. Please check your filters or Airtable connection.")
+        
+        # Refresh button that clears cache and reloads data
+        with load_col2:
+            if st.button("🔄 Refresh Data", key="refresh_utilization", use_container_width=True):
+                # Clear the cache to force a fresh fetch from Airtable
+                try:
+                    # Try to clear specific function's cache first
+                    get_utilization_data.clear()
+                except:
+                    # If that doesn't work, use general cache clearing
+                    st.cache_data.clear()
                 
-                # Display column information for debugging
-                if not utilization_df.empty:
-                    st.success(f"Successfully loaded utilization data with {len(utilization_df)} records")
-                    with st.expander("View Column Information"):
-                        st.write("Available columns in the data:", utilization_df.columns.tolist())
-                else:
-                    st.warning("No utilization data found. Please check your filters or Airtable connection.")
+                with st.spinner("Refreshing utilization data from Airtable..."):
+                    utilization_df = get_utilization_data(tab_filters)
+                    st.session_state.utilization_data = utilization_df
+                    st.success("✅ Data refreshed from Airtable!")
         
         # Display utilization data if available
         if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty:
@@ -1454,54 +1534,42 @@ def render_analytics_dashboard():
             st.info("No utilization data loaded. Please use the 'Load Utilization Data' button above.")
     
     # Financial Performance tab
-    with tab3:
+    elif st.session_state.active_analytics_tab == "Financial Performance":
         st.header("Financial Performance")
         
-        # Add tab-specific filters
-        with st.expander("Financial Filters", expanded=True):
-            # Filters for PnL data
-            col1, col2 = st.columns(2)
-            with col1:
-                tab_client_pnl = st.text_input("Filter by Client (leave empty for all)", key="client_filter_pnl_tab")
-            
-            with col2:
-                if st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty and 'Service_Month' in st.session_state.pnl_data.columns:
-                    # Handle case where Service_Month might contain lists
-                    month_values = []
-                    for val in st.session_state.pnl_data['Service_Month']:
-                        if isinstance(val, list):
-                            # If it's a list, add each item individually
-                            for month in val:
-                                month_values.append(month)
-                        else:
-                            # Otherwise, just add the value
-                            month_values.append(val)
-                    # Get unique values and sort
-                    month_options = ["All"] + sorted(set(month_values))
-                    tab_month = st.selectbox("Service Month", month_options, key="pnl_month")
-                else:
-                    tab_month = "All"
-            
-            # Create filters dictionary based on selections
-            tab_filters = {}
-            if tab_client_pnl:
-                tab_filters['client'] = tab_client_pnl
-            if tab_month != "All":
-                tab_filters['month'] = tab_month
+        # Create columns for the buttons
+        load_col1, load_col2 = st.columns(2)
         
-        # Fetch button for PnL data
-        if st.button("Load Financial Data"):
-            with st.spinner("Loading financial data..."):
-                pnl_df = get_pnl_data(tab_filters)
-                st.session_state.pnl_data = pnl_df
+        # Fetch button to get PnL data
+        with load_col1:
+            if st.button("Load Financial Data", type="primary", key="load_financial", use_container_width=True):
+                with st.spinner("Loading financial data..."):
+                    pnl_df = get_pnl_data()
+                    st.session_state.pnl_data = pnl_df
+                    
+                    # Display column information for debugging
+                    if not pnl_df.empty:
+                        st.success(f"✅ Successfully loaded financial data with {len(pnl_df)} records")
+                        with st.expander("View Column Information"):
+                            st.write("Available columns in the data:", pnl_df.columns.tolist())
+                    else:
+                        st.warning("No financial data found. Please check your Airtable connection.")
+        
+        # Refresh button that clears cache and reloads data
+        with load_col2:
+            if st.button("🔄 Refresh Data", key="refresh_financial", use_container_width=True):
+                # Clear the cache to force a fresh fetch from Airtable
+                try:
+                    # Try to clear specific function's cache first
+                    get_pnl_data.clear()
+                except:
+                    # If that doesn't work, use general cache clearing
+                    st.cache_data.clear()
                 
-                # Display column information for debugging
-                if not pnl_df.empty:
-                    st.success(f"Successfully loaded financial data with {len(pnl_df)} records")
-                    with st.expander("View Column Information"):
-                        st.write("Available columns in the data:", pnl_df.columns.tolist())
-                else:
-                    st.warning("No financial data found. Please check your filters or Airtable connection.")
+                with st.spinner("Refreshing financial data from Airtable..."):
+                    pnl_df = get_pnl_data()
+                    st.session_state.pnl_data = pnl_df
+                    st.success("✅ Data refreshed from Airtable!")
         
         # Display PnL data if available
         if st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty:
@@ -1513,59 +1581,48 @@ def render_analytics_dashboard():
                 st.info(f"Showing data with applied filters: {', '.join([f'{k}: {v}' for k, v in st.session_state.common_filters.items()])}")
                 st.write(f"Filtered data: {len(filtered_df)} records (from {len(st.session_state.pnl_data)} total)")
             
+            # Pass the filtered dataframe to the PnL dashboard
             create_pnl_dashboard(filtered_df)
         else:
             st.info("No financial data loaded. Please use the 'Load Financial Data' button above.")
     
     # SOW Analytics tab
-    with tab4:
+    elif st.session_state.active_analytics_tab == "SOW Analytics":
         st.header("SOW Analytics")
         
-        # Add tab-specific filters
-        with st.expander("SOW Filters", expanded=True):
-            # Filters for SOW data
-            col1, col2 = st.columns(2)
-            with col1:
-                tab_client_sow = st.text_input("Filter by Client (leave empty for all)", key="client_filter_sow_tab")
-            
-            with col2:
-                if st.session_state.sow_data is not None and not st.session_state.sow_data.empty and 'ProjectName' in st.session_state.sow_data.columns:
-                    # Handle case where ProjectName might contain lists
-                    project_values = []
-                    for val in st.session_state.sow_data['ProjectName']:
-                        if isinstance(val, list):
-                            # If it's a list, add each item individually
-                            for project in val:
-                                project_values.append(str(project))
-                        else:
-                            # Otherwise, just add the value as a string
-                            project_values.append(str(val))
-                    # Get unique values and sort
-                    project_options = ["All"] + sorted(set(project_values))
-                    tab_project = st.selectbox("Project", project_options, key="sow_project")
-                else:
-                    tab_project = "All"
-            
-            # Create filters dictionary based on selections
-            tab_filters = {}
-            if tab_client_sow:
-                tab_filters['client'] = tab_client_sow
-            if tab_project != "All":
-                tab_filters['project'] = tab_project
+        # Create columns for the buttons
+        load_col1, load_col2 = st.columns(2)
         
-        # Fetch button for SOW data
-        if st.button("Load SOW Data"):
-            with st.spinner("Loading SOW data..."):
-                sow_df = get_sow_data(tab_filters)
-                st.session_state.sow_data = sow_df
+        # Fetch button to get SOW data
+        with load_col1:
+            if st.button("Load SOW Data", type="primary", key="load_sow", use_container_width=True):
+                with st.spinner("Loading SOW data..."):
+                    sow_df = get_sow_data()
+                    st.session_state.sow_data = sow_df
+                    
+                    # Display column information for debugging
+                    if not sow_df.empty:
+                        st.success(f"✅ Successfully loaded SOW data with {len(sow_df)} records")
+                        with st.expander("View Column Information"):
+                            st.write("Available columns in the data:", sow_df.columns.tolist())
+                    else:
+                        st.warning("No SOW data found. Please check your Airtable connection.")
+        
+        # Refresh button that clears cache and reloads data
+        with load_col2:
+            if st.button("🔄 Refresh Data", key="refresh_sow", use_container_width=True):
+                # Clear the cache to force a fresh fetch from Airtable
+                try:
+                    # Try to clear specific function's cache first
+                    get_sow_data.clear()
+                except:
+                    # If that doesn't work, use general cache clearing
+                    st.cache_data.clear()
                 
-                # Display column information for debugging
-                if not sow_df.empty:
-                    st.success(f"Successfully loaded SOW data with {len(sow_df)} records")
-                    with st.expander("View Column Information"):
-                        st.write("Available columns in the data:", sow_df.columns.tolist())
-                else:
-                    st.warning("No SOW data found. Please check your Airtable connection.")
+                with st.spinner("Refreshing SOW data from Airtable..."):
+                    sow_df = get_sow_data()
+                    st.session_state.sow_data = sow_df
+                    st.success("✅ Data refreshed from Airtable!")
         
         # Display SOW data if available
         if st.session_state.sow_data is not None and not st.session_state.sow_data.empty:
@@ -1577,100 +1634,45 @@ def render_analytics_dashboard():
                 st.info(f"Showing data with applied filters: {', '.join([f'{k}: {v}' for k, v in st.session_state.common_filters.items()])}")
                 st.write(f"Filtered data: {len(filtered_df)} records (from {len(st.session_state.sow_data)} total)")
             
+            # Pass the filtered dataframe to the SOW dashboard
             create_sow_dashboard(filtered_df)
         else:
             st.info("No SOW data loaded. Please use the 'Load SOW Data' button above.")
     
     # Column Mappings tab
-    with tab5:
-        st.header("Column Mappings Configuration")
+    elif st.session_state.active_analytics_tab == "Column Mappings":
+        st.header("Column Mappings")
+        
         st.markdown("""
         <div style="background-color: white; padding: 1rem; border-radius: 10px; margin-bottom: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-            <h4 style="margin-top: 0; color: #2c3e50;">⚙️ Configure Data Column Mappings</h4>
-            <p style="margin-bottom: 0;">If the dashboard cannot automatically detect your Airtable column names, you can manually map them here.</p>
+            <h4 style="margin-top: 0; color: #2c3e50;">🔧 Configure Column Mappings</h4>
+            <p style="margin-bottom: 0;">Configure how columns from your Airtable bases are mapped to the dashboard visualizations.</p>
         </div>
         """, unsafe_allow_html=True)
         
-        mapping_tables = ["UTILIZATION", "PNL", "SOW"]
-        mapping_tab1, mapping_tab2, mapping_tab3 = st.tabs(mapping_tables)
-        
-        # Required fields for each table
-        required_fields = {
-            "UTILIZATION": ['CLIENT', 'SITE', 'DATE_OF_SERVICE', 'YEAR', 'HEADCOUNT', 
-                           'TOTAL_BOOKING_APPTS', 'TOTAL_COMPLETED_APPTS'],
-            "PNL": ['CLIENT', 'SITE_LOCATION', 'SERVICE_MONTH', 'REVENUE_TOTAL', 
-                    'EXPENSE_COGS_TOTAL', 'NET_PROFIT'],
-            "SOW": ['ClientCompanyName', 'ProjectName', 'SOWQuoteNumber', 
-                   'ScheduledPlanningStartDate', 'ScheduledEndDate']
-        }
+        # Create tabs for different data types
+        mapping_tab1, mapping_tab2, mapping_tab3 = st.tabs(["Utilization", "Financial", "SOW"])
         
         with mapping_tab1:
-            st.subheader("Utilization Data Mappings")
+            st.subheader("Utilization Column Mappings")
+            # Show current mappings
+            st.write("Current mappings:", st.session_state.column_mappings['UTILIZATION'])
+            # Add UI for updating mappings
+            # ...
             
-            # Show actual columns if data exists
-            if st.session_state.utilization_data is not None and not st.session_state.utilization_data.empty:
-                st.write("Available columns in the data:", st.session_state.utilization_data.columns.tolist())
-                
-                st.write("Map required fields to your actual column names:")
-                for field in required_fields["UTILIZATION"]:
-                    col_options = [""] + st.session_state.utilization_data.columns.tolist()
-                    selected_col = st.selectbox(
-                        f"Map {field} to:", 
-                        options=col_options,
-                        index=col_options.index(st.session_state.column_mappings["UTILIZATION"].get(field, "")) if st.session_state.column_mappings["UTILIZATION"].get(field, "") in col_options else 0,
-                        key=f"util_{field}"
-                    )
-                    if selected_col:
-                        st.session_state.column_mappings["UTILIZATION"][field] = selected_col
-            else:
-                st.info("Load Utilization Data first to configure column mappings")
-                
         with mapping_tab2:
-            st.subheader("PnL Data Mappings")
+            st.subheader("Financial Column Mappings")
+            # Show current mappings
+            st.write("Current mappings:", st.session_state.column_mappings['PNL'])
+            # Add UI for updating mappings
+            # ...
             
-            # Show actual columns if data exists
-            if st.session_state.pnl_data is not None and not st.session_state.pnl_data.empty:
-                st.write("Available columns in the data:", st.session_state.pnl_data.columns.tolist())
-                
-                st.write("Map required fields to your actual column names:")
-                for field in required_fields["PNL"]:
-                    col_options = [""] + st.session_state.pnl_data.columns.tolist()
-                    selected_col = st.selectbox(
-                        f"Map {field} to:", 
-                        options=col_options,
-                        index=col_options.index(st.session_state.column_mappings["PNL"].get(field, "")) if st.session_state.column_mappings["PNL"].get(field, "") in col_options else 0,
-                        key=f"pnl_{field}"
-                    )
-                    if selected_col:
-                        st.session_state.column_mappings["PNL"][field] = selected_col
-            else:
-                st.info("Load Financial Data first to configure column mappings")
-                
         with mapping_tab3:
-            st.subheader("SOW Data Mappings")
-            
-            # Show actual columns if data exists
-            if st.session_state.sow_data is not None and not st.session_state.sow_data.empty:
-                st.write("Available columns in the data:", st.session_state.sow_data.columns.tolist())
-                
-                st.write("Map required fields to your actual column names:")
-                for field in required_fields["SOW"]:
-                    col_options = [""] + st.session_state.sow_data.columns.tolist()
-                    selected_col = st.selectbox(
-                        f"Map {field} to:", 
-                        options=col_options,
-                        index=col_options.index(st.session_state.column_mappings["SOW"].get(field, "")) if st.session_state.column_mappings["SOW"].get(field, "") in col_options else 0,
-                        key=f"sow_{field}"
-                    )
-                    if selected_col:
-                        st.session_state.column_mappings["SOW"][field] = selected_col
-            else:
-                st.info("Load SOW Data first to configure column mappings")
-        
-        # Add button to apply mappings
-        if st.button("Apply Column Mappings"):
-            st.success("Column mappings saved! The mappings will be used when loading data.")
-            # The mappings are already saved in session_state, we just show confirmation
+            st.subheader("SOW Column Mappings")
+            # Show current mappings
+            st.write("Current mappings:", st.session_state.column_mappings['SOW'])
+            # Add UI for updating mappings
+            # ...
 
 if __name__ == "__main__":
     render_analytics_dashboard() 

@@ -585,12 +585,12 @@ def create_utilization_dashboard(df, interactive=True, dark_mode=False):
                     
                     # Choose time grouping
                     time_groups = {
-                        'Monthly': 'ME',
+                        'Monthly': 'M',
                         'Quarterly': 'Q',
                         'Yearly': 'Y'
                     }
                     
-                    freq = time_groups.get(time_grouping, 'ME')
+                    freq = time_groups.get(time_grouping, 'M')
                     
                     # Prepare data
                     time_series_data = []
@@ -608,7 +608,7 @@ def create_utilization_dashboard(df, interactive=True, dark_mode=False):
                         all_services_time = pd.concat(time_series_data)
                         
                         # Format date for display
-                        if freq == 'ME':
+                        if freq == 'M':
                             all_services_time['Period'] = all_services_time['Date of Service'].dt.strftime('%b %Y')
                         elif freq == 'Q':
                             all_services_time['Period'] = all_services_time['Date of Service'].apply(
@@ -979,12 +979,12 @@ def create_utilization_dashboard(df, interactive=True, dark_mode=False):
         
         # Determine time grouping frequency
         time_groups = {
-            "Monthly": "ME",
+            "Monthly": "M",
             "Quarterly": "Q",
             "Yearly": "Y"
         }
         
-        freq = time_groups.get(time_grouping, "ME")
+        freq = time_groups.get(time_grouping, "M")
         
         # Prepare time series data
         time_series = df.groupby(pd.Grouper(key='Date of Service', freq=freq)).agg({

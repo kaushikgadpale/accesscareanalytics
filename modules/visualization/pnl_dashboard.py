@@ -181,7 +181,16 @@ def create_pnl_dashboard(df):
         </div>
         """, unsafe_allow_html=True)
         
-        monthly_performance = df.groupby(pd.Grouper(key='Service_Month', freq='ME')).agg({
+        # Convert to datetime if not already
+        if not pd.api.types.is_datetime64_any_dtype(df['Service_Month']):
+            try:
+                df['Service_Month'] = pd.to_datetime(df['Service_Month'])
+            except:
+                st.warning("Could not convert Service_Month to datetime for time series analysis")
+                return
+        
+        # Group by month
+        monthly_performance = df.groupby(pd.Grouper(key='Service_Month', freq='M')).agg({
             'Revenue_Total': 'sum',
             'Expense_COGS_Total': 'sum',
             'Net_Profit': 'sum'

@@ -32,6 +32,17 @@ def render_leader_performance_dashboard():
     # Page header
     st.title("Onsite Leader Performance")
     
+    # Add refresh data button at the top
+    col_refresh, col_spacer = st.columns([1, 5])
+    
+    with col_refresh:
+        if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+            # Clear cache to force data refresh
+            get_kpi_data.clear()
+            st.success("✅ Data refreshed from Daily KPI table!")
+            # Force page to reload to show the updated data
+            st.rerun()
+    
     # Filters
     st.subheader("Filters")
     
